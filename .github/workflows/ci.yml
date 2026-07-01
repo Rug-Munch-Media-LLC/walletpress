@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install ruff mypy
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy . --strict --ignore-missing-imports
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python3 -m pytest tests/ -v --tb=short --cov --cov-report=term-missing
+
+  security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install bandit safety
+      - run: bandit -r . --quiet --skip=B101,B311
+      - run: safety check
+
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: pre-commit/action@v3.0
+
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pip-licenses
+      - run: bash /home/dev/scripts/license-audit.sh
+        continue-on-error: true
+
+  ai-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get diff
+        run: git diff origin/${{ github.base_ref }}...HEAD > /tmp/pr.diff
+      - name: AI Review
+        env:
+          OPENAI_API_KEY: ${{ secrets.WP_AI_API_KEY }}
+        run: |
+          curl -s ${{ secrets.WP_AI_BASE_URL || 'https://openrouter.ai/api/v1' }}/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.WP_AI_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "${{ secrets.WP_AI_MODEL || 'openai/gpt-4o' }}",
+              "messages": [
+                {"role": "system", "content": "Review this PR diff. List bugs, security issues, AI hallucinations, and maintainability problems."},
+                {"role": "user", "content": "'"$(cat /tmp/pr.diff)"'"}
+              ]
+            }' > /tmp/ai_review.json

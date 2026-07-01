@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buy WalletPress — Checkout · $49 One-Time</title>
+<meta name="description" content="Purchase WalletPress — pay with crypto or card. Instant source code delivery. 30 chains, self-hosted, no subscriptions.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,510;14..32,590;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root { --bg: #08090a; --bg2: #0c0d0f; --bg3: #121317; --bg4: #181a1f; --border: rgba(255,255,255,0.06); --border2: rgba(255,255,255,0.09); --fg: #f7f8f8; --fg2: #9ca0a8; --fg3: #5f636b; --accent: #f0a030; --accent2: #d48c1e; --accent-glow: rgba(240,160,48,0.12); --accent-glow2: rgba(240,160,48,0.2); --cyan: #22d3ee; --purple: #8b5cf6; --green: #22c55e; --red: #ef4444; --radius: 6px; --radius-lg: 12px; --radius-xl: 16px; --radius-pill: 9999px; --nav-h: 52px; }
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:rgba(240,160,48,0.3);color:var(--fg)}
+img,svg{display:block;max-width:100%}
+
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease-out,transform .6s ease-out}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--nav-h);background:rgba(8,9,10,0.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1200px;margin:0 auto;padding:0 20px;height:100%;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;color:var(--fg);text-decoration:none;letter-spacing:-0.02em}
+.logo img{width:28px;height:28px}
+.nav-links{display:flex;align-items:center;gap:24px}
+.nav-links a{color:var(--fg2);text-decoration:none;font-size:13px;font-weight:510;transition:color .15s}
+.nav-links a:hover{color:var(--fg)}
+.nav-cta{padding:6px 16px!important;border-radius:var(--radius)!important;background:var(--accent)!important;color:#08090a!important;font-weight:590!important;font-size:13px!important}
+.nav-cta:hover{background:var(--accent2)!important}
+.hamburger{display:none;flex-direction:column;gap:4px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{display:block;width:20px;height:1.5px;background:var(--fg2);transition:.2s}
+.hamburger.open span:nth-child(1){transform:rotate(45deg) translate(4px,4px)}
+.hamburger.open span:nth-child(2){opacity:0}
+.hamburger.open span:nth-child(3){transform:rotate(-45deg) translate(4px,-4px)}
+.mobile-menu{display:none;position:fixed;top:var(--nav-h);left:0;right:0;bottom:0;background:var(--bg);z-index:99;padding:32px 20px;flex-direction:column;gap:20px}
+.mobile-menu.open{display:flex}
+.mobile-menu a{color:var(--fg2);text-decoration:none;font-size:18px;font-weight:510}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border-radius:var(--radius);font-size:14px;font-weight:590;text-decoration:none;transition:all .2s;cursor:pointer;border:none;font-family:inherit;letter-spacing:-0.01em}
+.btn-primary{background:var(--accent);color:#08090a}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 8px 24px var(--accent-glow)}
+.btn-secondary{background:rgba(255,255,255,0.04);color:var(--fg);border:1px solid var(--border2)}
+.btn-secondary:hover{background:rgba(255,255,255,0.07)}
+.btn-lg{padding:14px 28px;font-size:15px}
+.btn-outline{background:transparent;color:var(--fg);border:1px solid var(--border2)}
+.btn-outline:hover{background:rgba(255,255,255,0.04);border-color:var(--accent-glow2)}
+.btn-sm{padding:8px 16px;font-size:12px}
+
+section{padding:80px 20px}
+@media(min-width:768px){section{padding:100px 32px}}
+.container{max-width:1100px;margin:0 auto}
+
+.hero{min-height:30vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:120px 20px 40px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-30%;left:-50%;width:200%;height:160%;background:radial-gradient(ellipse at 50% 0%,var(--accent-glow),transparent 50%);opacity:0.15;pointer-events:none}
+.hero-content{position:relative;z-index:1;max-width:600px}
+.hero h1{font-size:clamp(28px,5vw,44px);font-weight:700;line-height:1.1;letter-spacing:-0.03em;margin-bottom:12px}
+.hero p{color:var(--fg2);font-size:15px;margin:0 auto 28px;line-height:1.6;font-weight:400}
+
+/* Checkout Layout */
+.checkout-grid{display:grid;grid-template-columns:1fr;gap:24px;max-width:1000px;margin:0 auto}
+@media(min-width:768px){.checkout-grid{grid-template-columns:1fr 1.2fr}}
+
+.order-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl);padding:28px;height:fit-content;position:sticky;top:80px}
+.order-panel h3{font-size:14px;font-weight:590;text-transform:uppercase;letter-spacing:0.05em;color:var(--fg3);margin-bottom:20px}
+.order-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
+.order-item:last-child{border-bottom:none}
+.order-item .name{font-size:14px;color:var(--fg)}
+.order-item .desc{font-size:12px;color:var(--fg3);margin-top:2px}
+.order-item .price{font-size:14px;font-weight:590;color:var(--fg)}
+.order-total{display:flex;justify-content:space-between;align-items:center;padding:16px 0;margin-top:8px;border-top:2px solid var(--border)}
+.order-total .name{font-size:16px;font-weight:700}
+.order-total .price{font-size:20px;font-weight:700;color:var(--accent)}
+
+.payment-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl);padding:28px}
+.payment-panel h3{font-size:14px;font-weight:590;text-transform:uppercase;letter-spacing:0.05em;color:var(--fg3);margin-bottom:20px}
+
+/* Payment Method Tabs */
+.pay-tabs{display:flex;gap:8px;margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:16px}
+.pay-tab{padding:10px 20px;border-radius:var(--radius);font-size:13px;font-weight:590;color:var(--fg2);background:transparent;border:1px solid transparent;cursor:pointer;transition:all .15s;font-family:inherit}
+.pay-tab:hover{color:var(--fg)}
+.pay-tab.active{background:var(--accent-glow);color:var(--accent);border-color:var(--accent-glow2)}
+
+.pay-content{display:none}
+.pay-content.active{display:block}
+
+/* Card Payment */
+.card-form{display:flex;flex-direction:column;gap:16px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{display:flex;flex-direction:column;gap:6px}
+.form-group.full{grid-column:1 / -1}
+.form-group label{font-size:12px;font-weight:510;color:var(--fg2);text-transform:uppercase;letter-spacing:0.03em}
+.form-group input,.form-group select{padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);font-family:inherit;font-size:14px;transition:all .15s}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--accent-glow2);box-shadow:0 0 0 3px var(--accent-glow)}
+.form-group input::placeholder{color:var(--fg3)}
+
+/* Crypto Payment */
+.chain-select{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px}
+@media(min-width:640px){.chain-select{grid-template-columns:repeat(4,1fr)}}
+.chain-option{padding:14px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;text-align:center;transition:all .15s}
+.chain-option:hover{border-color:var(--border2)}
+.chain-option.selected{border-color:var(--accent);background:rgba(240,160,48,0.08)}
+.chain-option .icon{font-size:24px;margin-bottom:6px}
+.chain-option .name{font-size:12px;font-weight:590;color:var(--fg)}
+.chain-option .symbol{font-size:11px;color:var(--fg3);margin-top:2px}
+
+.qr-section{text-align:center;padding:24px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px}
+.qr-section .qr-wrap{background:#fff;display:inline-block;padding:12px;border-radius:var(--radius);margin-bottom:16px}
+.qr-section .qr-wrap img{display:block;width:200px;height:200px}
+.qr-section .amount{font-size:18px;font-weight:700;color:var(--accent);margin-bottom:8px}
+.qr-section .addr{display:inline-flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-top:8px;cursor:pointer;transition:all .15s}
+.qr-section .addr:hover{border-color:var(--accent-glow2)}
+.qr-section .addr code{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
+.qr-section .addr .copy-btn{font-size:10px;color:var(--fg3);text-transform:uppercase;letter-spacing:0.05em}
+
+.payment-status{text-align:center;padding:20px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.payment-status .status-icon{font-size:32px;margin-bottom:8px}
+.payment-status .status-text{font-size:14px;font-weight:590;color:var(--fg);margin-bottom:4px}
+.payment-status .status-sub{font-size:12px;color:var(--fg3)}
+
+/* Email capture */
+.email-capture{margin-top:24px;padding:20px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.email-capture p{font-size:13px;color:var(--fg2);margin-bottom:12px}
+.email-capture .form-row{display:flex;gap:8px}
+.email-capture input{flex:1;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);font-family:inherit;font-size:14px}
+.email-capture input:focus{outline:none;border-color:var(--accent-glow2)}
+
+.guarantee{display:inline-flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius-pill);font-size:12px;color:var(--fg2);font-weight:510;margin-top:20px}
+.guarantee svg{color:var(--accent)}
+
+footer{border-top:1px solid var(--border);padding:40px 20px;text-align:center}
+.footer-grid{display:flex;justify-content:center;flex-wrap:wrap;gap:24px;margin-bottom:20px}
+.footer-grid a{color:var(--fg3);text-decoration:none;font-size:12px;font-weight:510;transition:color .15s}
+.footer-grid a:hover{color:var(--fg2)}
+footer .copy{color:var(--fg3);font-size:11px}
+
+@media(max-width:768px){
+  .nav-links{display:none}
+  .hamburger{display:flex}
+  .hero h1{font-size:26px}
+  .form-row{grid-template-columns:1fr}
+  .chain-select{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="logo"><img src="logo.svg" alt="WalletPress">WalletPress</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="docs.html">Docs</a>
+      <a href="about.html">About</a>
+      <a href="buy.html" class="nav-cta">Buy — $49</a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.toggle('open');this.classList.toggle('open')" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <a href="index.html">Home</a>
+  <a href="features.html">Features</a>
+  <a href="docs.html">Docs</a>
+  <a href="about.html">About</a>
+  <a href="buy.html" class="nav-cta">Buy — $49</a>
+</div>
+
+<section class="hero">
+  <div class="hero-content">
+    <h1>Complete Your Purchase</h1>
+    <p>One-time payment. Lifetime access. Self-hosted wallet generator.</p>
+  </div>
+</section>
+
+<section>
+  <div class="checkout-grid">
+    <div class="order-panel">
+      <h3>Order Summary</h3>
+      <div class="order-item">
+        <div>
+          <div class="name">WalletPress Self-Hosted</div>
+          <div class="desc">30 chains, CLI + API, encrypted vault</div>
+        </div>
+        <div class="price">$49.00</div>
+      </div>
+      <div class="order-item">
+        <div>
+          <div class="name">Lifetime Updates</div>
+          <div class="desc">Free updates for life</div>
+        </div>
+        <div class="price" style="color:var(--green)">Included</div>
+      </div>
+      <div class="order-item">
+        <div>
+          <div class="name">Source Code</div>
+          <div class="desc">Full Docker Compose project</div>
+        </div>
+        <div class="price" style="color:var(--green)">Included</div>
+      </div>
+      <div class="order-total">
+        <span class="name">Total</span>
+        <span class="price">$49.00</span>
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <div class="guarantee" style="margin-top:0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          30-day money-back guarantee
+        </div>
+      </div>
+    </div>
+
+    <div class="payment-panel">
+      <h3>Payment Method</h3>
+      
+      <div class="pay-tabs">
+        <button class="pay-tab active" onclick="switchTab('crypto')">Crypto</button>
+        <button class="pay-tab" onclick="switchTab('card')">Card</button>
+        <button class="pay-tab" onclick="switchTab('gumroad')">Gumroad</button>
+      </div>
+
+      <!-- Crypto Payment -->
+      <div id="crypto-panel" class="pay-content active">
+        <p style="font-size:13px;color:var(--fg2);margin-bottom:16px">Select a chain and send exactly <strong style="color:var(--accent)" id="crypto-amount-display">$49.00 USD</strong> worth. We'll verify and deliver instantly.</p>
+        
+        <div id="price-loading" style="text-align:center;padding:12px;color:var(--fg3);font-size:12px">Loading prices...</div>
+        
+        <div class="chain-select" id="chain-select">
+          <div class="chain-option selected" data-chain="evm" data-addr="0x1E3AC01d0fdb976179790BDD02823196A92705C9" data-symbol="ETH" onclick="selectChain(this)">
+            <div class="icon">Ξ</div>
+            <div class="name">Ethereum</div>
+            <div class="symbol">ETH / USDC</div>
+          </div>
+          <div class="chain-option" data-chain="btc" data-addr="bc1qzkllckr024wqttm4px6egcwsya9tcrgghm46kq" data-symbol="BTC" onclick="selectChain(this)">
+            <div class="icon">₿</div>
+            <div class="name">Bitcoin</div>
+            <div class="symbol">BTC</div>
+          </div>
+          <div class="chain-option" data-chain="sol" data-addr="G1uZFfsdxK2PuH2Em5LhRkEcptxHWe4vy5BZak67QyKv" data-symbol="SOL" onclick="selectChain(this)">
+            <div class="icon">◎</div>
+            <div class="name">Solana</div>
+            <div class="symbol">SOL / USDC</div>
+          </div>
+          <div class="chain-option" data-chain="trx" data-addr="TYSWXWr24QTe3c99V9dtzhe1aZTneE261p" data-symbol="TRX" onclick="selectChain(this)">
+            <div class="icon">◆</div>
+            <div class="name">TRON</div>
+            <div class="symbol">TRX / USDT</div>
+          </div>
+        </div>
+
+        <div class="qr-section" id="qr-section">
+          <div class="qr-wrap">
+            <img id="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=ethereum:0x1E3AC01d0fdb976179790BDD02823196A92705C9" alt="Payment QR">
+          </div>
+          <div class="amount" id="amount-display">Send $49.00 USD in ETH</div>
+          <div class="addr" onclick="copyAddr()" id="addr-display">
+            <code id="addr-code">0x1E3A...05C9</code>
+            <span class="copy-btn">Copy</span>
+          </div>
+        </div>
+
+        <div class="email-capture">
+          <p><strong>Step 2:</strong> Enter your email so we can send your download link after confirmation.</p>
+          <div class="form-row">
+            <input type="email" id="crypto-email" placeholder="you@example.com">
+            <button class="btn btn-primary" onclick="submitCrypto()">I've Sent Payment</button>
+          </div>
+        </div>
+
+        <div class="payment-status" id="crypto-status" style="display:none">
+          <div class="status-icon">⏳</div>
+          <div class="status-text">Payment Pending</div>
+          <div class="status-sub">We'll email your download link once confirmed</div>
+        </div>
+      </div>
+
+      <!-- Card Payment -->
+      <div id="card-panel" class="pay-content">
+        <p style="font-size:13px;color:var(--fg2);margin-bottom:16px">Secure payment via Stripe. Your card details are never stored on our servers.</p>
+        <form class="card-form" onsubmit="event.preventDefault();submitCard()">
+          <div class="form-group full">
+            <label>Email</label>
+            <input type="email" placeholder="you@example.com" required>
+          </div>
+          <div class="form-group full">
+            <label>Card Number</label>
+            <input type="text" placeholder="4242 4242 4242 4242" maxlength="19" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Expiry</label>
+              <input type="text" placeholder="MM/YY" maxlength="5" required>
+            </div>
+            <div class="form-group">
+              <label>CVC</label>
+              <input type="text" placeholder="123" maxlength="4" required>
+            </div>
+          </div>
+          <div class="form-group full">
+            <label>Name on Card</label>
+            <input type="text" placeholder="John Doe" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-lg" style="width:100%">Pay $49.00</button>
+        </form>
+        <div class="payment-status" id="card-status" style="display:none;margin-top:16px">
+          <div class="status-icon">✓</div>
+          <div class="status-text">Payment Successful</div>
+          <div class="status-sub">Check your email for the download link</div>
+        </div>
+      </div>
+
+      <!-- Gumroad Payment -->
+      <div id="gumroad-panel" class="pay-content">
+        <p style="font-size:13px;color:var(--fg2);margin-bottom:16px">Pay via Gumroad with PayPal, Apple Pay, Google Pay, or crypto.</p>
+        <div style="text-align:center;padding:32px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg)">
+          <div style="font-size:48px;margin-bottom:16px">🛒</div>
+          <p style="font-size:14px;color:var(--fg2);margin-bottom:20px">You'll be redirected to Gumroad to complete your purchase securely.</p>
+          <a href="https://cryptorugmuncher.gumroad.com/l/walletpress" class="btn btn-primary btn-lg" target="_blank">Continue to Gumroad</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-grid">
+    <a href="docs.html">Documentation</a>
+    <a href="features.html">Features</a>
+    <a href="buy.html">Pricing</a>
+    <a href="about.html">About</a>
+    <a href="contact.html">Contact</a>
+  </div>
+  <p class="copy">© 2026 Rug Munch Media LLC. Made in Wyoming.</p>
+</footer>
+
+<script>
+// Tab switching
+function switchTab(tab) {
+  document.querySelectorAll('.pay-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.pay-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(tab + '-panel').classList.add('active');
+}
+
+// Chain selection
+let selectedChain = 'evm';
+let selectedAddr = '0x1E3AC01d0fdb976179790BDD02823196A92705C9';
+let selectedSymbol = 'ETH';
+
+const chainData = {
+  evm: { addr: '0x1E3AC01d0fdb976179790BDD02823196A92705C9', symbol: 'ETH', fullAddr: '0x1E3AC01d0fdb976179790BDD02823196A92705C9', qrPrefix: 'ethereum:' },
+  btc: { addr: 'bc1qzkllckr024wqttm4px6egcwsya9tcrgghm46kq', symbol: 'BTC', fullAddr: 'bc1qzkllckr024wqttm4px6egcwsya9tcrgghm46kq', qrPrefix: 'bitcoin:' },
+  sol: { addr: 'G1uZFfsdxK2PuH2Em5LhRkEcptxHWe4vy5BZak67QyKv', symbol: 'SOL', fullAddr: 'G1uZFfsdxK2PuH2Em5LhRkEcptxHWe4vy5BZak67QyKv', qrPrefix: 'solana:' },
+  trx: { addr: 'TYSWXWr24QTe3c99V9dtzhe1aZTneE261p', symbol: 'TRX', fullAddr: 'TYSWXWr24QTe3c99V9dtzhe1aZTneE261p', qrPrefix: 'tron:' }
+};
+
+function selectChain(el) {
+  document.querySelectorAll('.chain-option').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedChain = el.dataset.chain;
+  selectedAddr = el.dataset.addr;
+  selectedSymbol = el.dataset.symbol;
+  updateQR();
+}
+
+function updateQR() {
+  const data = chainData[selectedChain];
+  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(data.qrPrefix + data.fullAddr);
+  document.getElementById('qr-img').src = qrUrl;
+  document.getElementById('amount-display').textContent = 'Send $49.00 USD in ' + data.symbol;
+  document.getElementById('addr-code').textContent = data.addr.substring(0, 6) + '...' + data.addr.substring(data.addr.length - 4);
+  document.getElementById('addr-display').dataset.addr = data.fullAddr;
+}
+
+function copyAddr() {
+  const addr = document.getElementById('addr-display').dataset.addr;
+  navigator.clipboard.writeText(addr).then(() => {
+    const btn = document.querySelector('#addr-display .copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = addr;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    document.querySelector('#addr-display .copy-btn').textContent = 'Copied!';
+    setTimeout(() => document.querySelector('#addr-display .copy-btn').textContent = 'Copy', 2000);
+  });
+}
+
+function submitCrypto() {
+  const email = document.getElementById('crypto-email').value;
+  if (!email || !email.includes('@')) {
+    alert('Please enter a valid email address');
+    return;
+  }
+  document.getElementById('crypto-status').style.display = 'block';
+  document.getElementById('crypto-status').querySelector('.status-text').textContent = 'Payment Pending';
+  document.getElementById('crypto-status').querySelector('.status-sub').textContent = 'We\'ll email ' + email + ' once your ' + selectedSymbol + ' payment is confirmed';
+  // In production: send to backend webhook
+}
+
+function submitCard() {
+  document.getElementById('card-status').style.display = 'block';
+  // In production: Stripe integration
+}
+
+// Price fetching
+let currentPrices = {};
+const PRODUCT = 'walletpress'; // or 'pry' for Pry site
+
+async function fetchPrices() {
+  try {
+    const resp = await fetch('/api/prices');
+    if (!resp.ok) throw new Error('Price fetch failed');
+    currentPrices = await resp.json();
+    document.getElementById('price-loading').style.display = 'none';
+    updateAmountDisplay();
+  } catch (e) {
+    document.getElementById('price-loading').textContent = 'Using cached prices';
+  }
+}
+
+function updateAmountDisplay() {
+  const cgId = selectedChain === 'evm' ? 'ethereum' : selectedChain;
+  const priceData = currentPrices[cgId];
+  if (!priceData) return;
+  
+  const usdValue = PRODUCT === 'walletpress' ? 49.0 : 29.0;
+  const cryptoAmount = (usdValue / priceData.usd).toFixed(6);
+  const symbol = priceData.symbol;
+  
+  document.getElementById('amount-display').textContent = `Send ${cryptoAmount} ${symbol} (~$${usdValue} USD)`;
+  document.getElementById('crypto-amount-display').textContent = `${cryptoAmount} ${symbol}`;
+}
+
+// Modified selectChain to update amounts
+function selectChain(el) {
+  document.querySelectorAll('.chain-option').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedChain = el.dataset.chain;
+  selectedAddr = el.dataset.addr;
+  selectedSymbol = el.dataset.symbol;
+  updateQR();
+  updateAmountDisplay();
+}
+
+// Fetch prices on load
+fetchPrices();
+
+// Reveal animation
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

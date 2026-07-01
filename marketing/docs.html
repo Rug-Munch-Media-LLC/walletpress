@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentation — WalletPress · 30-Chain Wallet Generator</title>
+<meta name="description" content="Complete WalletPress documentation — quickstart, CLI reference, REST API reference (86 endpoints), deployment guide, security model, architecture.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,510;14..32,590;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#08090a;--bg2:#0c0d0f;--bg3:#121317;--bg4:#181a1f;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.09);
+  --fg:#f7f8f8;--fg2:#9ca0a8;--fg3:#5f636b;
+  --accent:#f0a030;--accent2:#d48c1e;--accent-glow:rgba(240,160,48,0.12);--accent-glow2:rgba(240,160,48,0.2);
+  --cyan:#22d3ee;--purple:#8b5cf6;--green:#22c55e;
+  --radius:6px;--radius-lg:12px;--radius-xl:16px;--nav-h:52px;--side-w:250px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;-webkit-font-smoothing:antialiased;font-feature-settings:'cv01','ss03'}
+::selection{background:rgba(240,160,48,0.3);color:var(--fg)}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--nav-h);background:rgba(8,9,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1300px;margin:0 auto;padding:0 20px;height:100%;display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--fg);text-decoration:none;letter-spacing:-0.02em}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:20px}
+.nav-links a{color:var(--fg2);text-decoration:none;font-size:12px;font-weight:510;transition:color .15s}
+.nav-links a:hover{color:var(--fg)}
+.nav-links .active{color:var(--accent)}
+.nav-cta{padding:5px 14px!important;border-radius:var(--radius)!important;background:var(--accent)!important;color:#08090a!important;font-weight:590!important;font-size:12px!important}
+.nav-cta:hover{background:var(--accent2)!important;color:#08090a!important}
+.pdf-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius);font-size:12px;font-weight:590;color:var(--accent);background:var(--accent-glow);border:1px solid var(--accent-glow2);text-decoration:none;transition:all .15s}
+.pdf-btn:hover{background:var(--accent);color:var(--bg)}
+
+.layout{display:flex;padding-top:var(--nav-h);min-height:100vh}
+.sidebar{width:var(--side-w);flex-shrink:0;position:fixed;top:var(--nav-h);bottom:0;overflow-y:auto;padding:24px 16px;border-right:1px solid var(--border);background:var(--bg);scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.sidebar h3{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--fg3);margin:20px 0 10px;font-weight:590}
+.sidebar h3:first-child{margin-top:0}
+.sidebar a{display:block;padding:5px 10px;border-radius:var(--radius);color:var(--fg2);text-decoration:none;font-size:12px;font-weight:510;margin-bottom:2px;transition:all .12s}
+.sidebar a:hover{color:var(--fg);background:var(--bg3)}
+.main{margin-left:var(--side-w);padding:32px 40px;max-width:900px;width:100%}
+
+/* Doc header with PDF CTA */
+.doc-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:32px;flex-wrap:wrap}
+.doc-header h1{font-size:30px;font-weight:700;letter-spacing:-0.02em;flex:1;min-width:200px}
+.doc-header .pdf-download{flex-shrink:0}
+.doc-header .pdf-download .pdf-btn-lg{padding:12px 20px;font-size:14px;gap:8px}
+.doc-header p{color:var(--fg2);font-size:14px;margin-top:4px}
+
+.main h2{font-size:22px;font-weight:590;margin:56px 0 16px;letter-spacing:-0.01em;padding-top:20px;border-top:1px solid var(--border)}
+.main h2:first-of-type{border-top:none;margin-top:0;padding-top:0}
+.main h3{font-size:15px;font-weight:590;margin:28px 0 10px;color:var(--accent);letter-spacing:-0.01em}
+.main h4{font-size:13px;font-weight:590;margin:20px 0 8px;color:var(--fg)}
+.main p,.main li{font-size:13px;color:var(--fg2);line-height:1.7}
+.main ul,.main ol{margin:8px 0 16px 20px}
+.main a{color:var(--accent);text-decoration:none}
+.main a:hover{text-decoration:underline}
+.main code{background:var(--bg3);padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent)}
+.main strong{color:var(--fg);font-weight:590}
+
+/* ENDPOINT CARDS */
+.endpoint{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;overflow:hidden;transition:border-color .15s}
+.endpoint:hover{border-color:var(--border2)}
+.ep-header{display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--bg3);border-bottom:1px solid var(--border)}
+.ep-method{font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:var(--radius);letter-spacing:0.03em;font-family:'JetBrains Mono',monospace}
+.ep-method.post{background:rgba(59,130,246,0.15);color:#60a5fa}
+.ep-method.get{background:rgba(34,197,94,0.15);color:#4ade80}
+.ep-method.put{background:rgba(245,158,11,0.15);color:#fbbf24}
+.ep-method.delete{background:rgba(239,68,68,0.15);color:#f87171}
+.ep-path{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--fg);font-weight:500}
+.ep-desc{margin-left:auto;font-size:11px;color:var(--fg3);font-weight:510;white-space:nowrap}
+.ep-body{padding:16px 18px}
+.ep-body p{font-size:12px;color:var(--fg2);margin-bottom:12px}
+.ep-body p:last-child{margin-bottom:0}
+
+/* CODE BLOCKS */
+pre{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;color:var(--fg2);margin-bottom:10px}
+pre .kw{color:#ff79c6}
+pre .s{color:#f1fa8c}
+pre .cm{color:var(--fg3)}
+pre .fn{color:#50fa7b}
+pre .v{color:var(--accent)}
+pre .n{color:#bd93f9}
+pre .c{color:var(--cyan)}
+pre .hl{color:var(--accent);font-weight:500}
+
+.table-wrap{overflow-x:auto;margin:10px 0 20px}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:400px}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--fg3);font-weight:590;font-size:10px;text-transform:uppercase;letter-spacing:0.05em}
+td{color:var(--fg2)}
+td code{background:var(--bg3);padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent)}
+
+.chain-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:4px;margin:16px 0}
+.chain-tag{font-size:11px;color:var(--fg2);padding:6px 10px;background:var(--bg3);border-radius:var(--radius);font-weight:510}
+
+/* Callout */
+.callout{padding:16px 20px;border-radius:var(--radius-lg);margin:16px 0;font-size:13px;line-height:1.6}
+.callout.info{background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);color:var(--fg2)}
+.callout.warn{background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);color:var(--fg2)}
+.callout.info strong{color:#60a5fa}
+.callout.warn strong{color:#fbbf24}
+
+/* Bottom download banner */
+.download-banner{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl);padding:28px 32px;text-align:center;margin:48px 0 24px}
+.download-banner h3{font-size:16px;color:var(--fg);margin-bottom:6px}
+.download-banner p{font-size:13px;color:var(--fg2);margin-bottom:16px}
+
+@media(max-width:900px){.sidebar{display:none}.main{margin-left:0;padding:24px 20px}.doc-header{flex-direction:column}}
+
+/* ===== PRINT / PDF STYLES ===== */
+@media print {
+  @page {
+    size: A4;
+    margin: 22mm 20mm 25mm 20mm;
+    @bottom-center {
+      content: "WalletPress Documentation v1.0 — Page " counter(page) " of " counter(pages);
+      font-family: 'Inter', sans-serif;
+      font-size: 8pt;
+      color: #888;
+    }
+    @top-right {
+      content: "WalletPress Docs";
+      font-family: 'Inter', sans-serif;
+      font-size: 8pt;
+      color: #aaa;
+      font-weight: 600;
+    }
+  }
+  @page :first {
+    @top-right { content: none; }
+    @bottom-center { content: none; }
+  }
+
+  :root {
+    --bg: #fff; --bg2: #fafafa; --bg3: #f5f5f5; --bg4: #eee;
+    --border: #ddd; --border2: #ccc;
+    --fg: #111; --fg2: #444; --fg3: #777;
+    --accent: #d48c1e; --accent2: #b87314;
+    --accent-glow: rgba(212,140,30,0.08); --accent-glow2: rgba(212,140,30,0.15);
+    --cyan: #0891b2; --purple: #7c3aed; --green: #16a34a;
+  }
+
+  body { font-size: 10pt; line-height: 1.55; color: #222; background: #fff; }
+  nav, .sidebar, .pdf-download, .download-banner, .pdf-btn, footer, .doc-header a { display: none !important; }
+  .layout { display: block; padding-top: 0; }
+  .main { margin-left: 0; padding: 0; max-width: 100%; }
+
+  /* Cover page styling */
+  .doc-header { margin-bottom: 40px; text-align: left; border-bottom: 3px solid #d48c1e; padding-bottom: 24px; }
+  .doc-header h1 { font-size: 26pt; font-weight: 700; color: #111; margin-bottom: 8px; letter-spacing: -0.02em; }
+  .doc-header p { font-size: 11pt; color: #555; }
+
+  h2 { font-size: 16pt; font-weight: 700; color: #111; margin: 36pt 0 12pt; padding-top: 18pt; border-top: 1.5px solid #ddd; page-break-after: avoid; }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+  h3 { font-size: 12pt; font-weight: 600; color: #d48c1e; margin: 20pt 0 8pt; page-break-after: avoid; }
+  h4 { font-size: 10.5pt; font-weight: 600; color: #333; margin: 14pt 0 6pt; }
+  p, li { font-size: 9.5pt; color: #333; line-height: 1.6; }
+  a { color: #d48c1e; text-decoration: none; }
+
+  /* Code blocks - light theme */
+  pre {
+    background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 4px;
+    padding: 10pt 12pt; font-size: 8pt; line-height: 1.55; color: #333;
+    page-break-inside: avoid; white-space: pre-wrap; word-break: break-all;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  pre .cm { color: #888; }
+  pre .s { color: #b87314; }
+  pre .kw { color: #7c3aed; }
+  pre .fn { color: #0891b2; }
+  pre .v { color: #d48c1e; }
+  pre .n { color: #7c3aed; }
+  pre .c { color: #0891b2; }
+  code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 8.5pt; color: #d48c1e; font-family: 'JetBrains Mono', monospace; }
+
+  /* Tables */
+  .table-wrap { margin: 10pt 0 16pt; }
+  table { font-size: 8.5pt; border-collapse: collapse; width: 100%; page-break-inside: avoid; }
+  th, td { padding: 6pt 8pt; text-align: left; border-bottom: 1px solid #ddd; }
+  th { color: #555; font-weight: 600; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.04em; background: #fafafa; }
+  td { color: #333; }
+  td code { background: #f0f0f0; font-size: 8pt; }
+
+  /* Endpoint cards */
+  .endpoint { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 10pt; page-break-inside: avoid; }
+  .ep-header { padding: 8pt 12pt; background: #f5f5f5; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 8pt; }
+  .ep-method { font-size: 7.5pt; padding: 2pt 6pt; border-radius: 3px; font-weight: 700; }
+  .ep-method.post { background: #eff6ff; color: #2563eb; }
+  .ep-method.get { background: #f0fdf4; color: #16a34a; }
+  .ep-method.put { background: #fffbeb; color: #d97706; }
+  .ep-method.delete { background: #fef2f2; color: #dc2626; }
+  .ep-path { font-size: 9pt; color: #111; font-weight: 600; }
+  .ep-desc { font-size: 8pt; color: #888; }
+  .ep-body { padding: 10pt 12pt; }
+  .ep-body p { font-size: 8.5pt; margin-bottom: 8pt; }
+
+  /* Callouts */
+  .callout { padding: 10pt 14pt; border-radius: 4px; margin: 10pt 0; font-size: 9pt; border-left: 3px solid; }
+  .callout.info { background: #eff6ff; border-color: #60a5fa; color: #1e40af; }
+  .callout.warn { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+  .callout.info strong { color: #2563eb; }
+  .callout.warn strong { color: #d97706; }
+
+  /* Chain grid */
+  .chain-grid { display: block; margin: 10pt 0; }
+  .chain-tag { display: inline-block; font-size: 8pt; color: #555; padding: 2pt 6pt; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 3px; margin: 2pt; }
+
+  /* Page breaks */
+  h2 { page-break-before: always; }
+  h2#quickstart, h2#what-you-get { page-break-before: avoid; }
+  pre, table, .endpoint, .callout { page-break-inside: avoid; }
+  h3, h4 { page-break-after: avoid; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/index.html" class="logo"><span class="logo-dot"></span>WalletPress Docs</a>
+    <div class="nav-links">
+      <a href="/index.html">Home</a>
+      <a href="/features.html">Features</a>
+      <a href="/docs.html" class="active">Docs</a>
+      <a href="/about.html">About</a>
+      <a href="/buy.html" class="nav-cta">Buy — $49</a>
+    </div>
+  </div>
+</nav>
+
+<div class="layout">
+<aside class="sidebar">
+  <h3>Getting Started</h3>
+  <a href="#quickstart">Quickstart</a>
+  <a href="#what-you-get">What You Get</a>
+  <a href="#chains">Supported Chains</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#security">Security Model</a>
+  <a href="#encryption">Encryption Modes</a>
+
+  <h3>CLI Reference</h3>
+  <a href="#cli">Overview</a>
+  <a href="#cli-generate">generate</a>
+  <a href="#cli-list">list</a>
+  <a href="#cli-import">import</a>
+  <a href="#cli-validate">validate</a>
+  <a href="#cli-balances">balances</a>
+  <a href="#cli-gas">gas</a>
+  <a href="#cli-paper">paper</a>
+  <a href="#cli-export">export</a>
+  <a href="#cli-rotate">rotate</a>
+  <a href="#cli-chain">chain</a>
+  <a href="#cli-stats">stats</a>
+  <a href="#cli-hd">hd</a>
+  <a href="#cli-bulk">bulk</a>
+
+  <h3>REST API</h3>
+  <a href="#api-base">Base URL &amp; Auth</a>
+  <a href="#api-core">Core Endpoints</a>
+  <a href="#api-security">Security Endpoints</a>
+  <a href="#api-operations">Operations</a>
+  <a href="#api-enterprise">Enterprise</a>
+
+  <h3>Deployment</h3>
+  <a href="#deploy">Docker Compose</a>
+  <a href="#deploy-config">Configuration</a>
+  <a href="#deploy-verify">Verification</a>
+
+  <h3>Downloads</h3>
+  <a href="#downloads" style="color:var(--accent)">📄 PDF &amp; Resources</a>
+</aside>
+
+<main class="main">
+
+<div class="doc-header">
+  <div>
+    <h1>WalletPress Documentation</h1>
+    <p>Complete reference for the WalletPress 30-chain wallet generation engine. CLI, REST API, deployment, and security.</p>
+    <p style="font-size:12px;color:var(--fg3);margin-top:4px">Base URL: <code>http://localhost:8000/api/v1/chain-vault</code> &nbsp;·&nbsp; v1.0.0 &nbsp;·&nbsp; 86 API routes</p>
+  </div>
+  <div class="pdf-download">
+    <a href="/walletpress-docs.pdf" class="pdf-btn pdf-btn-lg" download>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download PDF
+    </a>
+  </div>
+</div>
+
+<!-- QUICKSTART -->
+<h2 id="quickstart">Quickstart</h2>
+<p>WalletPress runs as a Docker Compose stack. After purchasing, you get the full source code as a <code>.tar.gz</code> archive.</p>
+<pre><span class="cm"># 1. Extract</span>
+tar xzf walletpress-1.0.0.tar.gz && <span class="fn">cd</span> walletpress
+
+<span class="cm"># 2. Start (one command)</span>
+docker compose up -d
+
+<span class="cm"># 3. Verify the API is running</span>
+curl http://localhost:8000/api/v1/chain-vault/healthz
+
+<span class="cm"># 4. Generate your first wallet</span>
+vault-package generate eth --count 3
+
+<span class="cm"># Or via REST API</span>
+curl -X POST http://localhost:8000/api/v1/chain-vault/generate \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"chain":"eth","count":1}'</span></pre>
+
+<!-- WHAT YOU GET -->
+<h2 id="what-you-get">What's Included</h2>
+<div class="table-wrap"><table>
+  <tr><th>Component</th><th>Description</th><th>Lines</th></tr>
+  <tr><td><code>wallet_factory.py</code></td><td>Core engine: 30-chain generation, encryption, keccak verification</td><td>~950</td></tr>
+  <tr><td><code>wallet_factory_router.py</code></td><td>86 REST API endpoints, vault management, authentication</td><td>~850</td></tr>
+  <tr><td><code>wallet_features.py</code></td><td>Multi-chain generation, validation, key management</td><td>501</td></tr>
+  <tr><td><code>wallet_phase2.py</code></td><td>Advanced features: balances, RPC, proofs, sweep</td><td>589</td></tr>
+  <tr><td><code>wallet_enhancements.py</code></td><td>HD wallets, paper wallets, import, webhooks, bulk ops</td><td>221</td></tr>
+  <tr><td><code>wallet_premium.py</code></td><td>API keys, tx builder, alerts, multisig, gas dashboard</td><td>376</td></tr>
+  <tr><td><code>wallet_enterprise.py</code></td><td>Bulk 1000, unlinkable wallets, auto-funding, batch proofs</td><td>~400</td></tr>
+  <tr><td><code>shamir.py</code></td><td>Shamir's Secret Sharing over GF(256) — pure Python</td><td>~200</td></tr>
+  <tr><td><code>wallet_killer.py</code></td><td>Mnemonic recovery, chain adder, wallet DNA, plugins</td><td>563</td></tr>
+  <tr><td><code>wallet_rbac.py</code></td><td>Role-based access control for multi-user deployments</td><td>138</td></tr>
+  <tr><td><code>Dockerfile + compose.yaml</code></td><td>Containerized deployment with health checks</td><td>—</td></tr>
+  <tr><td><code>vault-package</code> CLI</td><td>Bash CLI with SSH auto-tunnel, 14 commands</td><td>—</td></tr>
+</table></div>
+
+<!-- CHAINS -->
+<h2 id="chains">Supported Chains (30 Total)</h2>
+<p>Every major blockchain family. Addresses derived using chain-native cryptography — Keccak256 for EVM, ed25519 for Solana, secp256k1 for Bitcoin.</p>
+<div class="chain-grid">
+  <div class="chain-tag">Bitcoin (Legacy)</div><div class="chain-tag">Bitcoin (SegWit)</div><div class="chain-tag">Bitcoin (Native SW)</div>
+  <div class="chain-tag">Ethereum</div><div class="chain-tag">Base</div><div class="chain-tag">Polygon</div>
+  <div class="chain-tag">Arbitrum</div><div class="chain-tag">Optimism</div><div class="chain-tag">Avalanche</div>
+  <div class="chain-tag">BSC</div><div class="chain-tag">Fantom</div><div class="chain-tag">Gnosis</div>
+  <div class="chain-tag">Solana</div><div class="chain-tag">TRON</div><div class="chain-tag">Dogecoin</div>
+  <div class="chain-tag">Litecoin</div><div class="chain-tag">Bitcoin Cash</div><div class="chain-tag">Dash</div>
+  <div class="chain-tag">Zcash</div><div class="chain-tag">Cardano</div><div class="chain-tag">NEAR</div>
+  <div class="chain-tag">Sui</div><div class="chain-tag">Aptos</div><div class="chain-tag">XRP</div>
+  <div class="chain-tag">Polkadot</div><div class="chain-tag">Cosmos</div><div class="chain-tag">Algorand</div>
+  <div class="chain-tag">Tezos</div><div class="chain-tag">Monero</div><div class="chain-tag">TON</div>
+</div>
+<p style="font-size:11px;color:var(--fg3);margin-top:8px">13 chain families: Bitcoin, EVM (9 L1/L2), Solana, TRON, Doge-family (4), Privacy (2), Cardano, NEAR, Sui, Aptos, XRPL, Polkadot, Cosmos, Algorand, Tezos, Monero, TON.</p>
+
+<!-- ARCHITECTURE -->
+<h2 id="architecture">Architecture</h2>
+<pre><span class="cm">┌─────────────────────────────────────────┐</span>
+<span class="cm">│              Docker Compose              │</span>
+<span class="cm">│  ┌─────────────┐  ┌──────────────────┐  │</span>
+<span class="cm">│  │   FastAPI    │  │  Encrypted Vault │  │</span>
+<span class="cm">│  │  Port :8000  │◀─│  (Fernet + AES)  │  │</span>
+<span class="cm">│  │  86 Routes   │  │  Volume-mounted  │  │</span>
+<span class="cm">│  └──────┬───────┘  └──────────────────┘  │</span>
+<span class="cm">│         │                                 │</span>
+<span class="cm">│  ┌──────▼──────────────────────────────┐ │</span>
+<span class="cm">│  │      Wallet Factory Engine          │ │</span>
+<span class="cm">│  │  eth-hash · coincurve · ecdsa ·    │ │</span>
+<span class="cm">│  │  bip_utils · PyNaCl · base58 ·     │ │</span>
+<span class="cm">│  │  monero · cryptography              │ │</span>
+<span class="cm">│  └─────────────────────────────────────┘ │</span>
+<span class="cm">│             30 Chains · 13 Families       │</span>
+<span class="cm">└─────────────────────────────────────────┘</span></pre>
+
+<h3>Key Design Decisions</h3>
+<ul>
+  <li><strong>Keccak256 for EVM</strong> — Not SHA3-256. Ethereum uses Keccak with different padding. We use <code>eth-hash</code> for correct address derivation.</li>
+  <li><strong>On-chain verification</strong> — Every address derived by the factory is independently verified against each chain's canonical library (eth-keys, coincurve, PyNaCl, etc.).</li>
+  <li><strong>Zero external dependencies at runtime</strong> — No API calls, no cloud services, no telemetry. The container is fully self-contained.</li>
+  <li><strong>Volume-persisted vault</strong> — Wallet data stored on a Docker volume, surviving container restarts and upgrades.</li>
+</ul>
+
+<!-- SECURITY -->
+<h2 id="security">Security Model</h2>
+<div class="callout warn"><strong>IMPORTANT:</strong> Private keys are cryptographic secrets. Follow these guidelines to protect your wallets.</div>
+<ul>
+  <li><strong>Never expose port 8000 publicly</strong> — Run behind nginx reverse proxy with TLS or keep local-only.</li>
+  <li><strong>Enable API key authentication</strong> — Set <code>ADMIN_API_KEY</code> in your environment. All vault endpoints then require <code>X-API-Key</code> header.</li>
+  <li><strong>Use client-side encryption</strong> — Keys can be encrypted in your browser/CLI before reaching the server (zero-knowledge).</li>
+  <li><strong>Enable Fernet encryption</strong> — Auto-enabled on first run. All private keys encrypted at rest in the vault JSON.</li>
+  <li><strong>Rotate keys regularly</strong> — Use <code>/rotate</code> endpoint or <code>vault-package rotate</code>. Full audit trail tracks every rotation.</li>
+  <li><strong>Use RBAC for multi-user</strong> — Role-based access: admin, operator, viewer roles with granular permissions.</li>
+</ul>
+
+<h3>Cryptographic Standards</h3>
+<div class="table-wrap"><table>
+  <tr><th>Component</th><th>Algorithm</th><th>Standard</th></tr>
+  <tr><td>EVM / TRON</td><td>Keccak256 (secp256k1)</td><td>Ethereum Yellow Paper</td></tr>
+  <tr><td>Bitcoin / Doge-family</td><td>secp256k1 + RIPEMD-160</td><td>BIP32/39/44/84</td></tr>
+  <tr><td>Solana</td><td>ed25519 (Curve25519)</td><td>SLIP-0010</td></tr>
+  <tr><td>Cosmos / Polkadot</td><td>sr25519 / ed25519</td><td>Substrate</td></tr>
+  <tr><td>NEAR / Sui / Aptos</td><td>ed25519</td><td>BIP44</td></tr>
+  <tr><td>Vault encryption</td><td>Fernet (AES-128-CBC + HMAC-SHA256)</td><td>Python cryptography</td></tr>
+  <tr><td>Shamir MPC</td><td>Shamir's Secret Sharing GF(256)</td><td>Threshold cryptography</td></tr>
+</table></div>
+
+<!-- ENCRYPTION -->
+<h2 id="encryption">Encryption Modes</h2>
+<div class="table-wrap"><table>
+  <tr><th>Mode</th><th>Description</th><th>Security Level</th><th>Use Case</th></tr>
+  <tr><td><strong>None</strong></td><td>Keys stored as plaintext in vault</td><td>Low</td><td>Testnets, development</td></tr>
+  <tr><td><strong>Server-side (Fernet)</strong></td><td>Keys encrypted with auto-generated key. Vault stored encrypted on disk.</td><td>Medium</td><td>Production, single-user</td></tr>
+  <tr><td><strong>Client-side (AES-256-GCM)</strong></td><td>Keys encrypted with user passphrase before transmission. Server never sees plaintext.</td><td>High</td><td>Multi-user, shared infra</td></tr>
+  <tr><td><strong>Shamir MPC</strong></td><td>Key split into N shares. Need threshold M to reconstruct. No single point of failure.</td><td>Highest</td><td>Enterprise, custody</td></tr>
+</table></div>
+
+<!-- CLI REFERENCE -->
+<h2 id="cli">CLI Reference</h2>
+<p>The <code>vault-package</code> CLI auto-detects whether it's running on your server or remotely. On remote machines it tunnels through SSH automatically.</p>
+
+<h3 id="cli-generate">generate</h3>
+<p>Generate wallets on any chain.</p>
+<pre><span class="cm"># Generate 5 Ethereum wallets</span>
+vault-package generate eth --count 5
+
+<span class="cm"># With labels</span>
+vault-package generate sol --count 10 --label airdrop-batch-1
+
+<span class="cm"># Include private keys (CAUTION)</span>
+vault-package generate btc --count 3 --include-keys
+
+<span class="cm"># JSON output for scripting</span>
+vault-package generate eth --count 1 --json</pre>
+
+<h3 id="cli-list">list</h3>
+<pre>vault-package list                          <span class="cm"># All wallets</span>
+vault-package list --chain eth              <span class="cm"># Filter by chain</span>
+vault-package list --limit 100              <span class="cm"># Paginate</span></pre>
+
+<h3 id="cli-import">import</h3>
+<pre>vault-package import eth 0xabc123... --label <span class="s">"cold-storage"</span></pre>
+
+<h3 id="cli-validate">validate</h3>
+<pre>vault-package validate eth 0x847ca23452c3418358be201d41f6ed7ea8bcd95a
+<span class="cm"># → Valid: True</span></pre>
+
+<h3 id="cli-balances">balances</h3>
+<pre>vault-package balances           <span class="cm"># Check all vault wallet balances</span></pre>
+
+<h3 id="cli-gas">gas</h3>
+<pre>vault-package gas                <span class="cm"># Gas prices across all 30 chains</span></pre>
+
+<h3 id="cli-paper">paper</h3>
+<pre>vault-package paper a1b2c3d4              <span class="cm"># Generate printable wallet</span>
+vault-package paper a1b2c3d4 -o ~/out.html <span class="cm"># Custom output path</span></pre>
+
+<h3 id="cli-export">export</h3>
+<pre>vault-package export              <span class="cm"># Export vault to JSON</span>
+vault-package export --csv         <span class="cm"># Export as CSV</span></pre>
+
+<h3 id="cli-rotate">rotate</h3>
+<pre>vault-package rotate a1b2c3d4     <span class="cm"># Rotate a specific wallet key</span>
+vault-package rotate --chain eth   <span class="cm"># Rotate all ETH wallets</span></pre>
+
+<h3 id="cli-chain">chain</h3>
+<pre>vault-package chain               <span class="cm"># Table of all 30 chains</span>
+vault-package chain --json         <span class="cm"># JSON output</span></pre>
+
+<h3 id="cli-stats">stats</h3>
+<pre>vault-package stats               <span class="cm"># Vault stats: count, chains, encryption</span></pre>
+
+<h3 id="cli-hd">hd</h3>
+<pre>vault-package hd <span class="s">"abandon abandon abandon ..."</span> --label <span class="s">"main-hd"</span></pre>
+
+<h3 id="cli-bulk">bulk</h3>
+<pre>vault-package bulk eth --count 1000      <span class="cm"># Generate 1,000 wallets</span>
+vault-package bulk --status batch-abc123  <span class="cm"># Check bulk job status</span></pre>
+
+<!-- REST API -->
+<h2 id="api-base">REST API — Base URL &amp; Authentication</h2>
+<p>All endpoints are under <code>/api/v1/chain-vault/</code>. The API serves JSON on port 8000.</p>
+<div class="callout info"><strong>Auth:</strong> If <code>ADMIN_API_KEY</code> is set, include <code>X-API-Key: your-key</code> header on all requests. Without it, the vault is open to localhost-only access.</div>
+
+<h3 id="api-core">Core Endpoints</h3>
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/generate</span><span class="ep-desc">Generate wallets</span></div><div class="ep-body"><p>Generate one or more wallets on any chain. Supports batch labels.</p><pre><span class="kw">{</span><span class="s">"chain"</span>:<span class="s">"eth"</span>,<span class="s">"count"</span>:<span class="n">3</span>,<span class="s">"include_private_key"</span>:<span class="kw">false</span>,<span class="s">"label"</span>:<span class="s">"my-batch"</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/vault</span><span class="ep-desc">List all wallets</span></div><div class="ep-body"><p>Returns all wallets in the vault. Supports <code>?chain=eth</code> and <code>?limit=100</code> query params.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/vault/{id}</span><span class="ep-desc">Get wallet by ID</span></div><div class="ep-body"><p>Returns a single wallet with full details. Private key only included if <code>?include_key=true</code> and auth is valid.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/import</span><span class="ep-desc">Import existing wallet</span></div><div class="ep-body"><p>Import a wallet by private key hex. Validates the key against chain format before storing.</p><pre><span class="kw">{</span><span class="s">"chain"</span>:<span class="s">"eth"</span>,<span class="s">"private_key_hex"</span>:<span class="s">"abc123..."</span>,<span class="s">"label"</span>:<span class="s">"imported"</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/chains</span><span class="ep-desc">List all 30 chains</span></div><div class="ep-body"><p>Returns chain metadata: name, symbol, family, address format, derivation path.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/stats</span><span class="ep-desc">Vault statistics</span></div><div class="ep-body"><p>Returns generation count, chain breakdown, encryption status, vault health.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/validate</span><span class="ep-desc">Validate address</span></div><div class="ep-body"><p>Validate an address against its chain format rules. Returns <code>{"valid": true/false}</code>.</p><pre><span class="kw">{</span><span class="s">"chain"</span>:<span class="s">"eth"</span>,<span class="s">"address"</span>:<span class="s">"0x847ca..."</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/rotate</span><span class="ep-desc">Rotate wallet keys</span></div><div class="ep-body"><p>Rotate keys for a specific wallet or all wallets on a chain. Audit trail logged.</p><pre><span class="kw">{</span><span class="s">"wallet_id"</span>:<span class="s">"a1b2c3d4"</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/export</span><span class="ep-desc">Export vault</span></div><div class="ep-body"><p>Export vault data. <code>?format=csv</code> for CSV, default is JSON.</p></div></div>
+
+<h3 id="api-security">Security &amp; Key Management</h3>
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/split-key</span><span class="ep-desc">Shamir MPC split</span></div><div class="ep-body"><p>Split a private key into N shares using Shamir's Secret Sharing. Default: 3 shares, threshold 2. Pure Python GF(256) implementation.</p><pre><span class="kw">{</span><span class="s">"private_key_hex"</span>:<span class="s">"64-char-hex"</span>,<span class="s">"shares"</span>:<span class="n">3</span>,<span class="s">"threshold"</span>:<span class="n">2</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/reconstruct-key</span><span class="ep-desc">Reconstruct from shares</span></div><div class="ep-body"><p>Reconstruct a private key from N shares. Any threshold number of shares works.</p><pre><span class="kw">{</span><span class="s">"shares"</span>:[<span class="s">"share1..."</span>,<span class="s">"share2..."</span>]<span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/audit-trail</span><span class="ep-desc">View audit log</span></div><div class="ep-body"><p>Returns all wallet operations: generation, rotation, import, export with timestamps.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/health-score/{id}</span><span class="ep-desc">Wallet health score</span></div><div class="ep-body"><p>Returns a health score for a wallet based on key age, rotation status, and encryption state.</p></div></div>
+
+<h3 id="api-operations">Operations</h3>
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/balances</span><span class="ep-desc">Check all balances</span></div><div class="ep-body"><p>Returns balances for all vault wallets grouped by chain. Uses live RPC for EVM chains.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/gas</span><span class="ep-desc">Gas dashboard</span></div><div class="ep-body"><p>Gas prices for all 30 chains. Live RPC for 7 EVM chains, static estimates for 23 non-EVM chains.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/hd-wallet</span><span class="ep-desc">HD wallet from mnemonic</span></div><div class="ep-body"><p>Generate deterministic wallets from a BIP39 mnemonic.</p><pre><span class="kw">{</span><span class="s">"mnemonic"</span>:<span class="s">"abandon abandon ..."</span>,<span class="s">"label"</span>:<span class="s">"hd-main"</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method get">GET</span><span class="ep-path">/rpc-chains</span><span class="ep-desc">RPC health check</span></div><div class="ep-body"><p>Returns which chains have live RPC endpoints and their latency.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/paper</span><span class="ep-desc">Generate paper wallet</span></div><div class="ep-body"><p>Generate an HTML paper wallet with QR codes for a wallet ID.</p><pre><span class="kw">{</span><span class="s">"wallet_id"</span>:<span class="s">"a1b2c3d4"</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/link/proof</span><span class="ep-desc">Generate ownership proof</span></div><div class="ep-body"><p>Generate a cryptographic proof of wallet ownership (signed message).</p></div></div>
+
+<h3 id="api-enterprise">Enterprise</h3>
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/generate/bulk</span><span class="ep-desc">Bulk 1,000 wallets</span></div><div class="ep-body"><p>Generate up to 1,000 wallets in a background thread. Returns batch ID. Poll <code>GET /generate/bulk/{id}</code> for status.</p><pre><span class="kw">{</span><span class="s">"chain"</span>:<span class="s">"eth"</span>,<span class="s">"count"</span>:<span class="n">1000</span>,<span class="s">"label"</span>:<span class="s">"airdrop"</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/generate/unlinkable</span><span class="ep-desc">Unlinkable wallets</span></div><div class="ep-body"><p>Generate N wallets with independent entropy. No common seed. Cryptographically provable independence.</p><pre><span class="kw">{</span><span class="s">"chain"</span>:<span class="s">"eth"</span>,<span class="s">"count"</span>:<span class="n">10</span><span class="kw">}</span></pre></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/proof/sign</span><span class="ep-desc">Batch proof signing</span></div><div class="ep-body"><p>Sign a message with N wallet keys in a single API call. Returns Merkle-like proof hash.</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/funding-plans</span><span class="ep-desc">Auto-funding plans</span></div><div class="ep-body"><p>Create auto-funding rules: "when a wallet is generated, fund it with X ETH from master wallet."</p></div></div>
+
+<div class="endpoint"><div class="ep-header"><span class="ep-method post">POST</span><span class="ep-path">/tx/build</span><span class="ep-desc">Build transaction</span></div><div class="ep-body"><p>Build and sign a raw transaction. Specify recipient, amount, gas.</p><pre><span class="kw">{</span><span class="s">"wallet_id"</span>:<span class="s">"a1b"</span>,<span class="s">"to"</span>:<span class="s">"0xdef..."</span>,<span class="s">"amount_wei"</span>:<span class="s">"1000000000000000000"</span><span class="kw">}</span></pre></div></div>
+
+<!-- DEPLOYMENT -->
+<h2 id="deploy">Deployment</h2>
+<p>WalletPress ships as a self-contained Docker Compose project. Requirements: Linux server, Docker Engine 20.10+, 1GB+ RAM, 5GB+ disk.</p>
+<pre><span class="cm"># 1. Extract the archive</span>
+tar xzf walletpress-1.0.0.tar.gz && <span class="fn">cd</span> walletpress
+
+<span class="cm"># 2. Configure (optional — see below)</span>
+<span class="fn">export</span> <span class="v">ADMIN_API_KEY</span>=your-secure-api-key
+
+<span class="cm"># 3. Start the stack</span>
+docker compose up -d
+
+<span class="cm"># 4. Check logs</span>
+docker compose logs -f backend
+
+<span class="cm"># 5. Verify health</span>
+curl http://localhost:8000/api/v1/chain-vault/healthz</pre>
+
+<h3 id="deploy-config">Configuration</h3>
+<div class="table-wrap"><table>
+  <tr><th>Variable</th><th>Required</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>ADMIN_API_KEY</code></td><td>Recommended</td><td><em>none</em></td><td>API key for vault endpoints. If unset, localhost-only access.</td></tr>
+  <tr><td><code>VAULT_DIR</code></td><td>No</td><td><code>/app/.rmi/wallets</code></td><td>Path to vault data directory (volume-mounted).</td></tr>
+  <tr><td><code>LOG_LEVEL</code></td><td>No</td><td><code>INFO</code></td><td>Python logging level: DEBUG, INFO, WARNING, ERROR.</td></tr>
+  <tr><td><code>PORT</code></td><td>No</td><td><code>8000</code></td><td>API listen port.</td></tr>
+</table></div>
+
+<h3 id="deploy-verify">Post-Deployment Verification</h3>
+<pre><span class="cm"># Health check</span>
+curl http://localhost:8000/api/v1/chain-vault/healthz
+<span class="cm"># → {"status":"ok","service":"wallet-factory","version":"1.0.0"}</span>
+
+<span class="cm"># Generate a test wallet</span>
+curl -X POST http://localhost:8000/api/v1/chain-vault/generate \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"chain":"eth","count":1}'</span>
+
+<span class="cm"># Check chains</span>
+curl http://localhost:8000/api/v1/chain-vault/chains | jq <span class="s">'.total_chains'</span>
+<span class="cm"># → 30</span></pre>
+
+<!-- DOWNLOADS -->
+<h2 id="downloads">Downloads &amp; Resources</h2>
+
+<div class="download-banner">
+  <h3>📄 WalletPress Documentation PDF</h3>
+  <p>Complete reference manual — all CLI commands, API endpoints, deployment guide, and security model. Download and keep offline.</p>
+  <a href="/walletpress/walletpress-docs.pdf" class="pdf-btn pdf-btn-lg" download style="display:inline-flex">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Download PDF (2.1 MB)
+  </a>
+</div>
+
+<div class="table-wrap" style="margin-top:24px">
+  <table>
+    <tr><th>Resource</th><th>Format</th><th>Size</th><th>Download</th></tr>
+    <tr>
+      <td>Complete Documentation</td>
+      <td>PDF</td>
+      <td>~2.1 MB</td>
+      <td><a href="/walletpress/walletpress-docs.pdf" download>walletpress-docs.pdf</a></td>
+    </tr>
+    <tr>
+      <td>API Reference (this page)</td>
+      <td>HTML</td>
+      <td>—</td>
+      <td><a href="/docs.html">docs.html</a></td>
+    </tr>
+    <tr>
+      <td>Quickstart Cheat Sheet</td>
+      <td>Coming soon</td>
+      <td>—</td>
+      <td>—</td>
+    </tr>
+  </table>
+</div>
+
+<p style="margin-top:48px;padding-top:20px;border-top:1px solid var(--border);color:var(--fg3);font-size:12px">
+  <a href="/index.html">← Back to WalletPress</a> &nbsp;·&nbsp; Need help? <a href="mailto:support@walletpress.cc">support@walletpress.cc</a>
+</p>
+
+</main>
+</div>
+</body>
+</html>

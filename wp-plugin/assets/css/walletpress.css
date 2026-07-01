@@ -1,0 +1,98 @@
+/* ─── Layout ────────────────────────────────────────── */
+.walletpress-cols { display:flex; gap:20px; flex-wrap:wrap; }
+.walletpress-col  { flex:1; min-width:300px; }
+.walletpress-card { background:#fff; border:1px solid #dcdcde; padding:20px; margin-bottom:20px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+.walletpress-version { font-size:14px; color:#666; font-weight:400; }
+
+/* ─── Stats Grid ─────────────────────────────────────── */
+.walletpress-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin:20px 0; }
+.walletpress-stat { background:#fff; border:1px solid #dcdcde; border-radius:4px; padding:20px; text-align:center; }
+.walletpress-stat .stat-icon { display:block; font-size:28px; margin-bottom:8px; }
+.walletpress-stat .stat-value { display:block; font-size:24px; font-weight:700; color:#1d2327; }
+.walletpress-stat .stat-label { display:block; font-size:13px; color:#646970; margin-top:4px; }
+.stat-ok  { border-left:4px solid #00a32a; }
+.stat-warn { border-left:4px solid #dba617; }
+
+/* ─── Setup Wizard Steps ─────────────────────────────── */
+.walletpress-steps { display:flex; gap:4px; margin:20px 0; }
+.walletpress-steps .step { flex:1; padding:12px; text-align:center; background:#f0f0f1; color:#646970; font-weight:500; border-radius:4px; }
+.walletpress-steps .step.active { background:#2271b1; color:#fff; }
+
+/* ─── Connect Buttons ───────────────────────────────── */
+.walletpress-connect { display:flex; gap:12px; flex-wrap:wrap; }
+.walletpress-btn { display:inline-flex; align-items:center; gap:8px; padding:12px 24px; border:2px solid #dcdcde; background:#fff; border-radius:8px; font-size:15px; cursor:pointer; transition:all .15s; }
+.walletpress-btn:hover { border-color:#2271b1; background:#f0f6fc; }
+.walletpress-btn:active { transform:scale(.97); }
+.walletpress-btn-metamask:hover { border-color:#f6851b; background:#fff8f0; }
+.walletpress-btn-phantom:hover { border-color:#ab9ff2; background:#f5f0ff; }
+.walletpress-btn-pay { background:#2271b1; color:#fff; border-color:#2271b1; }
+.walletpress-btn-pay:hover { background:#135e96; color:#fff; }
+.walletpress-wallet-icon { font-size:20px; }
+
+/* ─── Profile ────────────────────────────────────────── */
+.walletpress-profile { padding:20px; background:#fff; border:1px solid #dcdcde; border-radius:4px; }
+.walletpress-profile p { margin:8px 0; }
+.walletpress-chain-badge { display:inline-block; padding:2px 8px; background:#2271b1; color:#fff; border-radius:3px; font-size:11px; margin-left:8px; }
+
+/* ─── Payment ────────────────────────────────────────── */
+.walletpress-payment { margin:16px 0; }
+.walletpress-payment-status { margin-top:8px; padding:8px 12px; border-radius:4px; }
+.walletpress-success { background:#edfaef; color:#00a32a; border:1px solid #b8e6bf; }
+.walletpress-error { background:#fcf0f1; color:#dc3232; border:1px solid #f1adad; padding:8px 12px; border-radius:4px; margin-top:8px; }
+
+/* ─── Badge ──────────────────────────────────────────── */
+.walletpress-badge { display:inline-block; padding:2px 8px; border-radius:3px; font-size:12px; font-weight:500; }
+.badge-confirmed { background:#edfaef; color:#00a32a; }
+.badge-pending   { background:#fcf9e8; color:#996800; }
+.badge-failed    { background:#fcf0f1; color:#dc3232; }
+
+/* ─── Token Gating ───────────────────────────────────── */
+.walletpress-gate-fallback { padding:20px; background:#fcf0f1; border:1px solid #f1adad; border-radius:4px; text-align:center; color:#dc3232; }
+.hidden { display:none !important; }
+
+/* ─── Table tweaks ───────────────────────────────────── */
+.walletpress-admin .wp-list-table code { font-size:12px; }
+.new-gate input, .new-gate select { width:100%; }
+
+/* ════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Added for WalletPress v1.1
+   All breakpoints: 320px (small phone), 480px (phone),
+   768px (tablet), 1024px (desktop)
+   ════════════════════════════════════════════════════════════ */
+
+@media(max-width:1024px) {
+  .walletpress-stats-grid { grid-template-columns:repeat(2,1fr); }
+}
+
+@media(max-width:768px) {
+  .walletpress-stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
+  .walletpress-cols { flex-direction:column; }
+  .walletpress-col { min-width:auto; }
+  .walletpress-card { padding:16px; }
+  .walletpress-connect { flex-direction:column; }
+  .walletpress-btn { width:100%; justify-content:center; padding:14px; }
+  .walletpress-steps { flex-direction:column; gap:2px; }
+  .walletpress-steps .step { padding:10px; font-size:13px; }
+  .walletpress-stat { padding:16px; }
+  .walletpress-stat .stat-value { font-size:20px; }
+  table.wp-list-table { font-size:13px; }
+  table.wp-list-table th, table.wp-list-table td { padding:6px 8px; }
+}
+
+@media(max-width:480px) {
+  .walletpress-stats-grid { grid-template-columns:1fr; gap:8px; }
+  .walletpress-stat { padding:12px; }
+  .walletpress-stat .stat-icon { font-size:22px; }
+  .walletpress-stat .stat-value { font-size:18px; }
+  .walletpress-card { padding:12px; margin-bottom:12px; }
+  .walletpress-card h1 { font-size:20px; }
+  .walletpress-card h2 { font-size:16px; }
+  .walletpress-card h3 { font-size:14px; }
+  .wp-list-table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+}
+
+@media(max-width:360px) {
+  .walletpress-connect { gap:8px; }
+  .walletpress-btn { font-size:14px; padding:12px; }
+  .walletpress-wallet-icon { font-size:18px; }
+}

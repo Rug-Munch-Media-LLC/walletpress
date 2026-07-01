@@ -1,0 +1,52 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > /tmp/pr.diff
+          echo "diff_size=$(wc -c < /tmp/pr.diff)" >> $GITHUB_OUTPUT
+
+      - name: AI Code Review
+        if: steps.diff.outputs.diff_size < 100000
+        env:
+          OPENAI_API_KEY: ${{ secrets.WP_AI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.WP_AI_BASE_URL }}
+        run: |
+          curl -s ${{ secrets.WP_AI_BASE_URL || 'https://openrouter.ai/api/v1' }}/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.WP_AI_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "${{ secrets.WP_AI_MODEL || 'openai/gpt-4o' }}",
+              "messages": [
+                {"role": "system", "content": "Review this PR diff for bugs, security issues, AI hallucinations, and maintainability problems. Output issues with file:line references."},
+                {"role": "user", "content": "'"$(cat /tmp/pr.diff)"'"}
+              ]
+            }' > /tmp/ai_review.json
+
+      - name: Post Review Comment
+        if: steps.diff.outputs.diff_size < 100000
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = JSON.parse(fs.readFileSync('/tmp/ai_review.json', 'utf8'));
+            const content = review.choices?.[0]?.message?.content || 'AI review unavailable (check API key)';
+            const comment = `## 🤖 AI Code Review\n\n${content}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

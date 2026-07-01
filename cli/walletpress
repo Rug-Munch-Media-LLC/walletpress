@@ -1,0 +1,650 @@
+#!/usr/bin/env bash
+# WalletPress CLI — Self-Hosted Wallet Management Platform
+# Usage: walletpress <command> [options]
+set -euo pipefail
+
+VERSION="1.0.0-beta"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/walletpress"
+CONFIG_FILE="$CONFIG_DIR/config.json"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/walletpress"
+GATES_FILE="$DATA_DIR/gates.json"
+LOG_FILE="$DATA_DIR/walletpress.log"
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
+
+mkdir -p "$CONFIG_DIR" "$DATA_DIR"
+touch "$GATES_FILE" "$LOG_FILE"
+
+log()   { echo "[$(date +%H:%M:%S)] $*" >> "$LOG_FILE"; }
+info()  { echo -e "${BLUE}::${NC} $*"; }
+ok()    { echo -e "${GREEN}✓${NC} $*"; }
+warn()  { echo -e "${YELLOW}⚠${NC} $*"; }
+err()   { echo -e "${RED}✗${NC} $*" >&2; }
+hr()    { printf '%*s\n' "${COLUMNS:-80}" '' | tr ' ' '─'; }
+die()   { err "$1"; exit 1; }
+
+# ─── Config ──────────────────────────────────────────────────────────
+
+load_config() {
+  if [[ -f "$CONFIG_FILE" ]]; then
+    API_URL=$(jq -r '.api_url // ""' "$CONFIG_FILE")
+    API_KEY=$(jq -r '.api_key // ""' "$CONFIG_FILE")
+    MERCHANT_WALLET=$(jq -r '.merchant_wallet // ""' "$CONFIG_FILE")
+    MERCHANT_CHAIN=$(jq -r '.merchant_chain // "solana"' "$CONFIG_FILE")
+    DEFAULT_CHAIN=$(jq -r '.default_chain // "solana"' "$CONFIG_FILE")
+  else API_URL=""; API_KEY=""; MERCHANT_WALLET=""; MERCHANT_CHAIN="solana"; DEFAULT_CHAIN="solana"
+  fi
+}
+
+save_config() {
+  jq -n --arg api_url "$API_URL" --arg api_key "$API_KEY" --arg merchant_wallet "$MERCHANT_WALLET" --arg merchant_chain "$MERCHANT_CHAIN" --arg default_chain "$DEFAULT_CHAIN" \
+    '{api_url: $api_url, api_key: $api_key, merchant_wallet: $merchant_wallet, merchant_chain: $merchant_chain, default_chain: $default_chain}' > "$CONFIG_FILE"
+  ok "Configuration saved"
+}
+
+# ─── API ─────────────────────────────────────────────────────────────
+
+CV="/api/v1/chain-vault"
+WA="/api/v1/wallet"
+
+api_call() {
+  local method="$1" path="$2" body="${3:-}"
+  if [[ -z "$API_URL" ]]; then die "API not configured. Run 'walletpress setup'"; fi
+  local url="${API_URL}${path}" headers=()
+  headers+=(-H "Content-Type: application/json")
+  [[ -n "$API_KEY" ]] && headers+=(-H "Authorization: Bearer $API_KEY" -H "X-API-Key: $API_KEY")
+  local cmd=("curl" "-sf")
+  [[ -n "$body" ]] && cmd+=(-X "$method" -d "$body") || cmd+=(-X "$method")
+  cmd+=( "${headers[@]}" "$url" )
+  "${cmd[@]}" 2>/dev/null || return 1
+}
+
+api_get()  { api_call GET "$1" ""; }
+api_post() { api_call POST "$1" "$2"; }
+api_del()  { api_call DELETE "$1" ""; }
+
+# ─── Gates ───────────────────────────────────────────────────────────
+
+load_gates() {
+  if [[ -f "$GATES_FILE" ]] && [[ -s "$GATES_FILE" ]]; then GATES=$(cat "$GATES_FILE"); else GATES='[]'; fi
+}
+save_gates() { echo "$GATES" > "$GATES_FILE"; }
+
+# ══════════════════════════════════════════════════════════════════════
+#  COMMANDS
+# ══════════════════════════════════════════════════════════════════════
+
+cmd_setup() {
+  hr; echo -e " ${BOLD}WalletPress Setup Wizard${NC}"; hr
+  echo -e "\n${CYAN}[1/5] API Connection${NC}"
+  read -rp "  Backend API URL [${API_URL:-}]: " input; API_URL="${input:-$API_URL}"
+  read -rsp "  API Key: " input; echo; API_KEY="${input:-$API_KEY}"
+  if [[ -n "$API_URL" && -n "$API_KEY" ]]; then
+    info "Testing connection..."
+    if health=$(api_get "/health" 2>/dev/null); then ok "Connected: $(echo "$health" | jq -r '.status // "ok"')"; else warn "API unreachable"; fi
+  fi
+  echo -e "\n${CYAN}[2/5] Merchant Wallet${NC}"
+  read -rp "  Wallet address [${MERCHANT_WALLET:-}]: " input; MERCHANT_WALLET="${input:-$MERCHANT_WALLET}"
+  read -rp "  Chain [${MERCHANT_CHAIN}]: " input; MERCHANT_CHAIN="${input:-$MERCHANT_CHAIN}"
+  echo -e "\n${CYAN}[3/5] Default Chain${NC}"
+  read -rp "  Default chain [${DEFAULT_CHAIN}]: " input; DEFAULT_CHAIN="${input:-$DEFAULT_CHAIN}"
+  save_config
+  echo -e "\n${CYAN}[4/5] Generate First Wallet${NC}"
+  read -rp "  Generate a wallet now? (y/N): " gen
+  if [[ "$gen" =~ ^[yY] ]]; then cmd_vault generate; fi
+  echo -e "\n${CYAN}[5/5] Create Token Gate${NC}"
+  read -rp "  Create a token gate? (y/N): " gate
+  if [[ "$gate" =~ ^[yY] ]]; then
+    read -rp "  Gate name: " title; read -rp "  Token address: " token; read -rp "  Chain [$DEFAULT_CHAIN]: " chain
+    chain="${chain:-$DEFAULT_CHAIN}"; read -rp "  Min amount [1]: " min; min="${min:-1}"
+    load_gates; GATES=$(echo "$GATES" | jq --arg t "$title" --arg k "$token" --arg c "$chain" --argjson m "$min" '. += [{title: $t, token: $k, chain: $c, min_amount: $m, created_at: now|strflocaltime("%Y-%m-%dT%H:%M:%S")}]'); save_gates
+    ok "Gate '$title' created"; fi
+  hr; ok "Setup complete!"
+  info "Run 'walletpress --help' to see all commands"
+}
+
+cmd_dashboard() {
+  load_config; hr
+  echo -e " ${BOLD}WalletPress${NC}                         v${VERSION}"; hr
+  echo -e "  URL:       ${API_URL:-(not set)}"
+  echo -e "  Merchant:  ${MERCHANT_WALLET:0:16}... [${MERCHANT_CHAIN}]"
+  echo -e "  Default:   ${DEFAULT_CHAIN}"
+  if [[ -n "$API_URL" ]]; then
+    health=$(api_get "/health" 2>/dev/null || echo '{"status":"unreachable"}')
+    echo -e "  API:       $(echo "$health" | jq -r '.status')"
+    stats=$(api_get "${CV}/stats" 2>/dev/null || echo '{}')
+    echo -e "  Vault:     $(echo "$stats" | jq -r '.total_wallets // "?"') wallets"
+    chains=$(api_get "${CV}/chains" 2>/dev/null || echo '[]')
+    echo -e "  Chains:    $(echo "$chains" | jq 'length') supported"
+  fi
+  load_gates; local gc=$(echo "$GATES" | jq 'length')
+  echo -e "  Gates:     $gc"
+  hr
+}
+
+# ─── VAULT ───────────────────────────────────────────────────────────
+
+cmd_vault() {
+  load_config
+  case "${1:-list}" in
+    list|ls)
+      local vault
+      vault=$(api_get "${CV}/vault" 2>/dev/null || die "Failed to fetch vault")
+      local count=$(echo "$vault" | jq 'length - 1')
+      echo -e "${BOLD}Vault (${count} wallets)${NC}"
+      echo "$vault" | jq -r 'to_entries | .[] | select(.key != "_meta") | "  \(.key[0:8])..  \(.value.chain // "?")  \(.value.address // .value.public_key // "")[0:24]...  \(.value.label // "")"'
+      ;;
+    get|view)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Wallet ID: " id
+      api_get "${CV}/vault/${id}" | jq '.' || warn "Wallet not found"
+      ;;
+    generate|gen)
+      local chain="${2:-$DEFAULT_CHAIN}" label="${3:-}"
+      [[ -z "$chain" ]] && read -rp "Chain [$DEFAULT_CHAIN]: " chain; chain="${chain:-$DEFAULT_CHAIN}"
+      [[ -z "$label" ]] && read -rp "Label: " label
+      result=$(api_post "${CV}/generate" "{\"chain\":\"$chain\",\"label\":\"$label\"}" || true)
+      if [[ -n "$result" ]]; then ok "Wallet generated"; echo "$result" | jq '{chain, address, label}'; else die "Generation failed"; fi
+      ;;
+    batch)
+      local chains="${2:-solana,ethereum,base,polygon,bsc}" prefix="${3:-batch}"
+      info "Generating wallets for: $chains"
+      result=$(api_post "${CV}/generate/batch" "{\"chains\":\"$chains\",\"label_prefix\":\"$prefix\"}" || true)
+      if [[ -n "$result" ]]; then ok "Batch complete"; echo "$result" | jq '.'; else die "Batch failed"; fi
+      ;;
+    all)
+      local prefix="${2:-full}"
+      info "Generating wallet for ALL supported chains..."
+      result=$(api_post "${CV}/generate/batch" "{\"label_prefix\":\"$prefix\"}" || true)
+      if [[ -n "$result" ]]; then ok "All chains generated"; echo "$result" | jq 'keys | .[]'; else die "Failed"; fi
+      ;;
+    import)
+      local chain="${2:-}" key="${3:-}" label="${4:-}"
+      [[ -z "$chain" ]] && read -rp "Chain: " chain
+      [[ -z "$key" ]] && read -rsp "Private key: " key; echo
+      [[ -z "$label" ]] && read -rp "Label: " label
+      result=$(api_post "${CV}/import" "{\"chain\":\"$chain\",\"private_key\":\"$key\",\"label\":\"$label\"}" || true)
+      if [[ -n "$result" ]]; then ok "Wallet imported"; echo "$result" | jq '.'; else die "Import failed"; fi
+      ;;
+    stats)
+      api_get "${CV}/stats" | jq '.' || warn "Failed to fetch stats"
+      ;;
+    tree)
+      api_get "${CV}/tree" | jq '.' || warn "Failed"
+      ;;
+    health-score)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Wallet ID: " id
+      api_get "${CV}/health-score/${id}" | jq '.' || warn "Failed"
+      ;;
+    rotate)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Wallet ID: " id
+      result=$(api_post "${CV}/rotate" "{\"wallet_id\":\"$id\"}" || true)
+      if [[ -n "$result" ]]; then ok "Wallet rotated"; echo "$result" | jq '{chain, new_address}'; else die "Rotation failed"; fi
+      ;;
+    export)
+      local format="${2:-json}"
+      result=$(api_post "${CV}/export" "{\"format\":\"$format\"}" || true)
+      if [[ -n "$result" ]]; then echo "$result" | jq '.'; else die "Export failed"; fi
+      ;;
+    filter)
+      local field="${2:-chain}" value="${3:-solana}"
+      api_post "${CV}/bulk/filter" "{\"filters\":{\"$field\":\"$value\"}}" | jq '.' || warn "Filter failed"
+      ;;
+    delete)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Wallet ID: " id
+      result=$(api_post "${CV}/bulk/delete" "{\"ids\":[\"$id\"]}" || true)
+      if [[ -n "$result" ]]; then ok "Wallet deleted"; else die "Delete failed"; fi
+      ;;
+    paper)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Wallet ID: " id
+      api_get "${CV}/paper-wallet/${id}" | jq '.' || warn "Failed"
+      ;;
+    *)
+      echo "Usage: walletpress vault <list|get|generate|batch|all|import|stats|tree|health-score|rotate|export|filter|delete|paper>"
+  esac
+}
+
+# ─── MNEMONIC ────────────────────────────────────────────────────────
+
+cmd_mnemonic() {
+  load_config
+  local phrase="${1:-}" passphrase="${2:-}"
+  if [[ -z "$phrase" ]]; then
+    read -rp "Mnemonic phrase (12/24 words): " phrase
+    read -rp "Passphrase (optional): " passphrase
+  fi
+  info "Deriving addresses for all chains..."
+  result=$(api_post "${CV}/from-mnemonic" "{\"mnemonic\":\"$phrase\",\"passphrase\":\"$passphrase\"}" || true)
+  if [[ -z "$result" ]]; then die "Conversion failed"; fi
+  echo "$result" | jq -r '.wallets // .result // . | to_entries | .[] | "  \(.key): \(.value.address // .value.public_key // "?")"'
+  ok "Done — $(echo "$result" | jq '.wallets // .result // . | length') addresses derived"
+}
+
+# ─── RECOVERY ────────────────────────────────────────────────────────
+
+cmd_recover() {
+  load_config
+  local partial="${1:-}" chain="${2:-$DEFAULT_CHAIN}"
+  if [[ -z "$partial" ]]; then
+    read -rp "Partial mnemonic (use ? for unknown words): " partial
+    read -rp "Chain [$chain]: " input; chain="${input:-$chain}"
+  fi
+  info "Attempting recovery on $chain..."
+  info "This may take time for large partial phrases."
+  # wallet_killer.py has the recovery engine — invoke via backend
+  warn "Recovery endpoint not yet exposed in REST API. Use backend directly: python3 -c 'from wallet_killer import recover; print(recover(...))'"
+}
+
+# ─── SWEEP ───────────────────────────────────────────────────────────
+
+cmd_sweep() {
+  load_config
+  case "${1:-}" in
+    rotate)
+      local id="${2:-}" to="${3:-}"
+      [[ -z "$id" ]] && read -rp "Wallet ID to rotate: " id
+      [[ -z "$to" ]] && read -rp "Destination address: " to
+      result=$(api_post "${CV}/rotate-sweep" "{\"wallet_id\":\"$id\",\"to_address\":\"$to\"}" || true)
+      if [[ -n "$result" ]]; then ok "Rotated and swept"; echo "$result" | jq '.'; else die "Failed"; fi
+      ;;
+    dust|sweep)
+      local id="${2:-}" to="${3:-}"
+      [[ -z "$id" ]] && read -rp "Wallet ID to sweep: " id
+      [[ -z "$to" ]] && read -rp "Destination address: " to
+      result=$(api_post "${CV}/sweep" "{\"from_wallet_id\":\"$id\",\"to_address\":\"$to\"}" || true)
+      if [[ -n "$result" ]]; then ok "Swept"; echo "$result" | jq '.'; else die "Sweep failed"; fi
+      ;;
+    temporal)
+      local chain="${2:-$DEFAULT_CHAIN}" ttl="${3:-3600}" label="${4:-temporal}"
+      result=$(api_post "${CV}/temporal/create" "{\"chain\":\"$chain\",\"ttl_seconds\":$ttl,\"label\":\"$label\"}" || true)
+      if [[ -n "$result" ]]; then ok "Temporal wallet created (TTL: ${ttl}s)"; echo "$result" | jq '{address, expires_at}'; else die "Failed"; fi
+      ;;
+    temporal-list)
+      api_get "${CV}/temporal/list" | jq '.' || warn "None"
+      ;;
+    temporal-release)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Temporal ID: " id
+      result=$(api_post "${CV}/temporal/release" "{\"temporal_id\":\"$id\"}" || true)
+      if [[ -n "$result" ]]; then ok "Released"; else die "Failed"; fi
+      ;;
+    distribute)
+      echo "Distribute funds across wallets (advanced). Use backend API directly for now."
+      ;;
+    funding)
+      local chain="${2:-$DEFAULT_CHAIN}" id="${3:-}" amount="${4:-}"
+      [[ -z "$id" ]] && read -rp "Wallet ID: " id
+      [[ -z "$amount" ]] && read -rp "Amount: " amount
+      result=$(api_post "${CV}/funding-bundle" "{\"chain\":\"$chain\",\"wallet_id\":\"$id\",\"amount\":$amount}" || true)
+      if [[ -n "$result" ]]; then ok "Funding bundle created"; echo "$result" | jq '.'; else die "Failed"; fi
+      ;;
+    deployer)
+      local chain="${2:-$DEFAULT_CHAIN}" id="${3:-}"
+      [[ -z "$id" ]] && read -rp "Wallet ID: " id
+      result=$(api_post "${CV}/deployer-setup" "{\"chain\":\"$chain\",\"wallet_id\":\"$id\"}" || true)
+      if [[ -n "$result" ]]; then ok "Deployer setup done"; echo "$result" | jq '.'; else die "Failed"; fi
+      ;;
+    *)
+      echo "Usage: walletpress sweep <rotate|dust|temporal|temporal-list|temporal-release|funding|deployer>"
+  esac
+}
+
+# ─── ESCROW ──────────────────────────────────────────────────────────
+
+cmd_escrow() {
+  load_config
+  case "${1:-create}" in
+    create)
+      local addr amount platform conditions
+      read -rp "Deposit address: " addr
+      read -rp "Amount (USD): " amount
+      read -rp "Platform [solana]: " platform; platform="${platform:-solana}"
+      read -rp "Conditions (JSON): " conditions
+      result=$(api_post "${CV}/escrow" "{\"deposit_address\":\"$addr\",\"amount\":$amount,\"platform\":\"$platform\",\"conditions\":$conditions}" || true)
+      if [[ -n "$result" ]]; then ok "Escrow created"; echo "$result" | jq '.'; else die "Failed"; fi
+      ;;
+    release)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Escrow ID: " id
+      result=$(api_post "${CV}/escrow/release" "{\"escrow_id\":\"$id\"}" || true)
+      if [[ -n "$result" ]]; then ok "Released"; echo "$result" | jq '.'; else die "Failed"; fi
+      ;;
+    *) echo "Usage: walletpress escrow <create|release>"
+  esac
+}
+
+# ─── WALLET ANALYSIS ────────────────────────────────────────────────
+
+cmd_wallet() {
+  load_config
+  local sub="${1:-balance}" addr="${2:-}" chain="${3:-$DEFAULT_CHAIN}"
+  [[ -z "$addr" ]] && read -rp "Address: " addr
+  [[ "$sub" != "verify" ]] && [[ -z "$chain" || "$chain" == "$DEFAULT_CHAIN" ]] && read -rp "Chain [$DEFAULT_CHAIN]: " input && chain="${input:-$chain}"
+  case "$sub" in
+    balance)
+      api_get "${WA}/${addr}/balance?chain=${chain}" | jq '.' || warn "Failed"
+      ;;
+    analyze)
+      api_get "${WA}/${addr}/analyze?chain=${chain}" | jq '.' || warn "Failed"
+      ;;
+    scan)
+      local tier="${3:-free}"
+      api_post "${WA}/scan" "{\"address\":\"$addr\",\"chain\":\"$chain\",\"tier\":\"$tier\"}" | jq '.' || warn "Failed"
+      ;;
+    txs|transactions)
+      local limit="${4:-20}"
+      api_get "${WA}/${addr}/transactions?chain=${chain}&limit=${limit}" | jq '.' || warn "Failed"
+      ;;
+    verify)
+      local msg sig
+      read -rp "Message: " msg; read -rp "Signature: " sig
+      api_post "${WA}/verify" "{\"address\":\"$addr\",\"message\":\"$msg\",\"signature\":\"$sig\",\"chain\":\"$chain\"}" | jq '.' || warn "Failed"
+      ;;
+    *) echo "Usage: walletpress wallet <balance|analyze|scan|txs|verify> [address] [chain]"
+  esac
+}
+
+# ─── GATES ───────────────────────────────────────────────────────────
+
+cmd_gate() {
+  load_config; load_gates
+  case "${1:-list}" in
+    add)
+      local title token chain min
+      read -rp "Gate name: " title; read -rp "Token address: " token
+      read -rp "Chain [$DEFAULT_CHAIN]: " chain; chain="${chain:-$DEFAULT_CHAIN}"
+      read -rp "Min amount [1]: " min; min="${min:-1}"
+      GATES=$(echo "$GATES" | jq --arg t "$title" --arg k "$token" --arg c "$chain" --argjson m "$min" '. += [{title: $t, token: $k, chain: $c, min_amount: $m, created_at: now|strflocaltime("%Y-%m-%dT%H:%M:%S")}]')
+      save_gates; local id=$(echo "$GATES" | jq 'length - 1')
+      ok "Gate '$title' created — shortcode: [wallet_gate id=\"$id\"]"
+      ;;
+    list)
+      local c=$(echo "$GATES" | jq 'length'); [[ "$c" -eq 0 ]] && { info "No gates"; return; }
+      hr; echo -e "${BOLD}Token Gates (${c})${NC}"; hr
+      echo "$GATES" | jq -r 'to_entries | .[] | "  \(.key). \(.value.title)\n     token: \(.value.token[0:32])...  chain: \(.value.chain)  min: \(.value.min_amount)\n     code:  [wallet_gate id=\"\(.key)\"]\n"'
+      hr
+      ;;
+    delete)
+      local id="${2:-}"; [[ -z "$id" ]] && cmd_gate list >&2 && read -rp "Gate ID to delete: " id
+      GATES=$(echo "$GATES" | jq "del(.[$id])"); save_gates; ok "Deleted"
+      ;;
+    check)
+      local addr="${2:-}" contract="${3:-}" chain="${4:-$DEFAULT_CHAIN}"
+      [[ -z "$addr" ]] && read -rp "Wallet address: " addr
+      [[ -z "$contract" ]] && read -rp "Contract address: " contract
+      result=$(api_get "${WA}/${addr}/balance?chain=${chain}" 2>/dev/null || echo '{}')
+      local held=$(echo "$result" | jq -r --arg c "$contract" '[.tokens // []] | map(select(.address == $c or .mint == $c)) | .[0].amount // 0')
+      if [[ "$(echo "$held > 0" | bc -l 2>/dev/null)" == "1" ]]; then ok "Wallet holds $held of $contract"; else warn "No holdings found"; fi
+      ;;
+    *) echo "Usage: walletpress gate <add|list|delete|check>"
+  esac
+}
+
+# ─── PAYMENTS ─────────────────────────────────────────────────────────
+
+cmd_payment() {
+  load_config
+  case "${1:-list}" in
+    create)
+      local from to amount token chain
+      read -rp "From address: " from; read -rp "To [${MERCHANT_WALLET:-}]: " to; to="${to:-$MERCHANT_WALLET}"
+      read -rp "Amount: " amount; read -rp "Token [SOL]: " token; token="${token:-SOL}"
+      read -rp "Chain [$DEFAULT_CHAIN]: " chain; chain="${chain:-$DEFAULT_CHAIN}"
+      result=$(api_post "${CV}/tx/build" "{\"chain\":\"$chain\",\"from\":\"$from\",\"to\":\"$to\",\"amount\":$amount,\"token\":\"$token\"}" || true)
+      if [[ -n "$result" ]]; then ok "Payment built"; echo "$result" | jq '.'; else die "Build failed"; fi
+      ;;
+    broadcast)
+      local tx="${2:-}" chain="${3:-$DEFAULT_CHAIN}"
+      [[ -z "$tx" ]] && read -rp "Signed TX (hex): " tx
+      result=$(api_post "${CV}/tx/broadcast" "{\"chain\":\"$chain\",\"signed_tx\":\"$tx\"}" || true)
+      if [[ -n "$result" ]]; then ok "Broadcasted"; echo "$result" | jq '{tx_hash, status}'; else die "Failed"; fi
+      ;;
+    list)
+      echo "On-chain payments: use 'walletpress wallet txs <address>' to view"
+      ;;
+    *) echo "Usage: walletpress payment <create|broadcast|list>"
+  esac
+}
+
+# ─── API KEYS ────────────────────────────────────────────────────────
+
+cmd_key() {
+  load_config
+  case "${1:-generate}" in
+    generate|create)
+      local label="${2:-}" scopes="${3:-vault.read,generate}"
+      [[ -z "$label" ]] && read -rp "Key label: " label
+      result=$(api_post "${CV}/api-keys" "{\"label\":\"$label\",\"scopes\":[\"${scopes//,/\"\,\"}\"]}" || true)
+      if [[ -n "$result" ]]; then
+        hr; echo -e "${BOLD}New API Key${NC}"; hr
+        echo -e "  ${CYAN}$(echo "$result" | jq -r '.api_key // "generated"')${NC}"; hr
+        echo "  Save this now — it won't be shown again."
+      else die "Key generation failed"; fi
+      ;;
+    list)
+      api_get "${CV}/api-keys" | jq '.' || info "No keys"
+      ;;
+    revoke)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Key ID: " id
+      result=$(api_post "${CV}/api-keys/revoke" "{\"key_id\":\"$id\"}" || true)
+      if [[ -n "$result" ]]; then ok "Revoked"; else die "Failed"; fi
+      ;;
+    local)
+      local key="wp_$(openssl rand -hex 24)"
+      hr; echo -e "${BOLD}Local API Key${NC}"; hr
+      echo -e "  ${CYAN}$key${NC}"; hr
+      echo "  Add to backend .env: WALLETPRESS_API_KEY=$key"
+      echo "  Add to WordPress settings as your API key"
+      ;;
+    *) echo "Usage: walletpress key <generate|list|revoke|local>"
+  esac
+}
+
+# ─── WEBHOOKS ────────────────────────────────────────────────────────
+
+cmd_webhook() {
+  load_config
+  case "${1:-list}" in
+    create)
+      local url events secret
+      read -rp "Webhook URL: " url
+      read -rp "Events (comma-sep) [wallet.generated]: " events; events="${events:-wallet.generated}"
+      read -rp "Secret: " secret
+      result=$(api_post "${CV}/webhooks" "{\"url\":\"$url\",\"events\":[\"${events//,/\"\,\"}\"],\"secret\":\"$secret\"}" || true)
+      if [[ -n "$result" ]]; then ok "Webhook created"; else die "Failed"; fi
+      ;;
+    list)
+      api_get "${CV}/webhooks" | jq '.' || info "No webhooks"
+      ;;
+    delete)
+      local id="${2:-}"; [[ -z "$id" ]] && read -rp "Webhook ID: " id
+      api_del "${CV}/webhooks/${id}" && ok "Deleted" || die "Failed"
+      ;;
+    *) echo "Usage: walletpress webhook <create|list|delete>"
+  esac
+}
+
+# ─── BALANCES ────────────────────────────────────────────────────────
+
+cmd_balances() {
+  load_config
+  case "${1:-list}" in
+    list)
+      api_get "${CV}/balances" | jq '.' || warn "Failed"
+      ;;
+    snapshot)
+      api_post "${CV}/balances/snapshot" "{}" | jq '.' || warn "Failed"
+      ;;
+    history)
+      local days="${2:-30}"
+      api_get "${CV}/balances/history?days=${days}" | jq '.' || warn "Failed"
+      ;;
+    *) echo "Usage: walletpress balances <list|snapshot|history>"
+  esac
+}
+
+# ─── CHAINS ──────────────────────────────────────────────────────────
+
+cmd_chain() {
+  load_config
+  case "${1:-list}" in
+    list)
+      api_get "${CV}/chains" | jq -r 'to_entries | .[] | "  \(.key): \(.value.name // .value)"' || warn "Failed"
+      ;;
+    rpc)
+      api_get "${CV}/rpc-chains" | jq '.' || warn "Failed"
+      ;;
+    validate)
+      local chain="${2:-}" addr="${3:-}"
+      [[ -z "$chain" ]] && read -rp "Chain: " chain
+      [[ -z "$addr" ]] && read -rp "Address: " addr
+      api_get "${CV}/validate/${chain}/${addr}" | jq '.' || warn "Failed"
+      ;;
+    link-proof)
+      local src="${2:-}" sc="${3:-}" tc="${4:-}"
+      [[ -z "$src" ]] && read -rp "Source address: " src
+      [[ -z "$sc" ]] && read -rp "Source chain: " sc
+      [[ -z "$tc" ]] && read -rp "Target chain: " tc
+      api_post "${CV}/link/proof" "{\"source_address\":\"$src\",\"source_chain\":\"$sc\",\"target_chain\":\"$tc\"}" | jq '.' || warn "Failed"
+      ;;
+    link-verify)
+      local addr="${2:-}" chain="${3:-}" proof="${4:-}"
+      [[ -z "$addr" ]] && read -rp "Address: " addr
+      [[ -z "$chain" ]] && read -rp "Chain: " chain
+      [[ -z "$proof" ]] && read -rp "Proof: " proof
+      api_post "${CV}/link/verify" "{\"address\":\"$addr\",\"chain\":\"$chain\",\"proof\":\"$proof\"}" | jq '.' || warn "Failed"
+      ;;
+    *) echo "Usage: walletpress chain <list|rpc|validate|link-proof|link-verify>"
+  esac
+}
+
+# ─── AUDIT ───────────────────────────────────────────────────────────
+
+cmd_audit() {
+  load_config
+  local limit="${1:-50}"
+  api_get "${CV}/audit-trail?limit=${limit}" | jq '.' || warn "No audit entries"
+}
+
+# ─── CLUSTER ─────────────────────────────────────────────────────────
+
+cmd_cluster() {
+  load_config
+  local chain="${1:-$DEFAULT_CHAIN}" count="${2:-10}"
+  info "Generating cluster-aware wallets on $chain..."
+  result=$(api_post "${CV}/cluster" "{\"chain\":\"$chain\",\"count\":$count}" || true)
+  if [[ -n "$result" ]]; then ok "Cluster generated"; echo "$result" | jq '.'; else die "Failed"; fi
+}
+
+# ─── HEALTH ──────────────────────────────────────────────────────────
+
+cmd_health() {
+  load_config; hr
+  echo -e "${BOLD}WalletPress Health Check${NC}"; hr
+  echo -n "  Config:   "; [[ -f "$CONFIG_FILE" ]] && ok "found" || warn "not configured"
+  echo -n "  API:      "
+  if [[ -n "$API_URL" ]]; then
+    local h; h=$(api_get "/health" 2>/dev/null || true)
+    [[ -n "$h" ]] && ok "$(echo "$h" | jq -r '.status')" || warn "unreachable"
+  else warn "not configured"; fi
+  echo -n "  Vault:    "
+  local v; v=$(api_get "${CV}/stats" 2>/dev/null || true)
+  [[ -n "$v" ]] && ok "$(echo "$v" | jq -r '.total_wallets // 0') wallets" || warn "unknown"
+  echo -n "  Chains:   "
+  local c; c=$(api_get "${CV}/chains" 2>/dev/null || true)
+  [[ -n "$c" ]] && ok "$(echo "$c" | jq 'length') supported" || warn "unknown"
+  echo -n "  Merchant: "
+  [[ -n "$MERCHANT_WALLET" ]] && ok "${MERCHANT_WALLET:0:8}... [$MERCHANT_CHAIN]" || warn "not set"
+  load_gates; echo -n "  Gates:    "; ok "$(echo "$GATES" | jq 'length') gate(s)"
+  hr
+}
+
+# ─── SERVE ───────────────────────────────────────────────────────────
+
+cmd_serve() {
+  load_config; local port="${1:-8580}" host="${2:-127.0.0.1}"
+  command -v python3 &>/dev/null || die "python3 required"
+  command -v walletpress-backend &>/dev/null && {
+    info "Starting WalletPress backend on $host:$port"
+    walletpress-backend serve --host "$host" --port "$port"
+    return
+  }
+  command -v uvicorn &>/dev/null && {
+    info "Starting WalletPress API at http://$host:$port"
+    cd "$(dirname "$0")/../backend" 2>/dev/null && uvicorn main:app --host "$host" --port "$port" --reload
+    return
+  }
+  info "Admin UI at http://$host:$port — Ctrl+C to stop"; hr
+  cd "$DATA_DIR" && python3 -m http.server "$port" --bind "$host"
+}
+
+# ══════════════════════════════════════════════════════════════════════
+#  MAIN
+# ══════════════════════════════════════════════════════════════════════
+
+load_config
+
+case "${1:-help}" in
+  help|-h|--help)       cat <<'HELP'
+WalletPress CLI — self-hosted multi-chain wallet generator
+
+Usage: walletpress <command> [options]
+
+Commands:
+  setup                 Run setup wizard
+  dash                  Show dashboard
+  vault                 List/browse vault wallets
+  mnemonic              Convert mnemonic to addresses
+  recover               Attempt wallet recovery
+  sweep                 Sweep & rotate wallets
+  escrow                Create escrow wallets
+  wallet                Wallet operations
+  gate                  Token gate management
+  payment               Payment records
+  serve                 Start admin UI
+  help                  Show this help
+HELP
+  ;;
+  setup|wizard)        shift; cmd_setup "$@" ;;
+  dash|dashboard|st)   cmd_dashboard ;;
+  vault|wallet-vault)  shift; cmd_vault "$@" ;;
+  mnemonic|convert)    shift; cmd_mnemonic "$@" ;;
+  recover|recovery)    shift; cmd_recover "$@" ;;
+  sweep)               shift; cmd_sweep "$@" ;;
+  escrow)              shift; cmd_escrow "$@" ;;
+  wallet|address)      shift; cmd_wallet "$@" ;;
+  gate|gates)          shift; cmd_gate "$@" ;;
+  pay|payment)         shift; cmd_payment "$@" ;;
+  key|keys|apikey)     shift; cmd_key "$@" ;;
+  webhook|hooks)       shift; cmd_webhook "$@" ;;
+  balance|balances)    shift; cmd_balances "$@" ;;
+  chain|chains)        shift; cmd_chain "$@" ;;
+  audit|logs)          shift; cmd_audit "$@" ;;
+  cluster)             shift; cmd_cluster "$@" ;;
+  health|status)       cmd_health ;;
+  serve|ui)            shift; cmd_serve "$@" ;;
+  version|-v|--version) echo "WalletPress CLI v${VERSION}" ;;
+  help|-h|--help|"")
+    hr
+    echo -e "${BOLD}WalletPress CLI v${VERSION}${NC}"; hr
+    echo -e "  ${CYAN}setup${NC}         Interactive setup wizard (5 steps)"
+    echo -e "  ${CYAN}dashboard${NC}     System overview"
+    echo -e "  ${CYAN}vault${NC}          Wallet vault: list, get, generate, batch, all, import,"; echo "                    stats, tree, health-score, rotate, export, filter, delete, paper"
+    echo -e "  ${CYAN}mnemonic${NC}       BIP39 mnemonic → 55 chain addresses"
+    echo -e "  ${CYAN}recover${NC}        Wallet recovery from partial mnemonics"
+    echo -e "  ${CYAN}sweep${NC}          Sweep: rotate, dust, temporal, funding, deployer"
+    echo -e "  ${CYAN}escrow${NC}         Pay-to-release escrow: create, release"
+    echo -e "  ${CYAN}wallet${NC}         Wallet analysis: balance, analyze, scan, txs, verify"
+    echo -e "  ${CYAN}gate${NC}           Token gates: add, list, delete, check"
+    echo -e "  ${CYAN}payment${NC}        Crypto payments: create, broadcast"
+    echo -e "  ${CYAN}key${NC}            API keys: generate, list, revoke, local"
+    echo -e "  ${CYAN}webhook${NC}        Webhooks: create, list, delete"
+    echo -e "  ${CYAN}balances${NC}       Balance tracking: list, snapshot, history"
+    echo -e "  ${CYAN}chain${NC}          Chain info: list, rpc, validate, link-proof, link-verify"
+    echo -e "  ${CYAN}audit${NC}          Audit trail viewer"
+    echo -e "  ${CYAN}cluster${NC}        Cluster-aware wallet generation"
+    echo -e "  ${CYAN}health${NC}         System health check"
+    echo -e "  ${CYAN}serve${NC}          Start admin HTTP UI [port] [host]"
+    hr
+    echo "  Config: $CONFIG_FILE  |  Data: $DATA_DIR  |  Log: $LOG_FILE"
+    hr
+    ;;
+  *) die "Unknown: $1. Run 'walletpress help'"
+esac

@@ -1,0 +1,77 @@
+[project]
+name = "walletpress"
+version = "1.1.0"
+description = "Self-hosted multi-chain wallet generation & management. Open source, auditable, trustless."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Rug Munch Media LLC"},
+]
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "coincurve>=18.0.0",
+    "ecdsa>=0.19.0",
+    "base58>=2.1.1",
+    "pynacl>=1.5.0",
+    "cryptography>=42.0.0",
+    "httpx>=0.27.0",
+    "aiosqlite>=0.20.0",
+    "bip-utils>=2.9.0",
+    "apscheduler>=3.10.0",
+]
+
+[project.urls]
+homepage = "https://walletpress.cc"
+repository = "https://github.com/cryptorugmuncher/walletpress"
+documentation = "https://docs.walletpress.cc"
+
+[project.scripts]
+walletpress = "walletpress_cli:main"
+wp-verify-receipt = "cli.verify_receipt:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["walletpress*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+]
+
+[tool.ruff.lint]
+# We tolerate E402 (intentional imports for circular-dep avoidance in
+# mcp_server, main.py, routers/airdrop.py, tests/) and E702 (one-line
+# multi-statement idioms in plugins/defi.py for compact React-style code).
+# F821 false-positives are tracked separately; the cli/verify_receipt.py
+# one is intentional (parameter shadowing).
+extend-ignore = [
+    "E402",
+    "E702",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may have imports after docstrings for setup convenience
+"tests/*" = ["E402"]
+# mcp_server uses local imports to break circular dependencies
+"agent/mcp_server.py" = ["E402"]
+"main.py" = ["E402"]
+# routers/airdrop.py uses local imports for plugin isolation
+"routers/airdrop.py" = ["E402"]
+# plugins/__init__.py re-exports for plugin SDK public API
+"plugins/__init__.py" = ["F401"]
+# cli/verify_receipt.py — timestamp is a function parameter (F821 false positive)
+"cli/verify_receipt.py" = ["F821"]

@@ -1,0 +1,16 @@
+# WalletPress Chain Definitions
+# Users can add custom chains here. Values merge on top of defaults in chains.py.
+# 
+# Format:
+#   <key>:
+#     name: <display name>
+#     family: <evm|bitcoin|solana|tron|ed25519|secp256k1_alt|ripple|substrate|cosmos|algorand|tezos|monero|stellar|ton|nano|filecoin>
+#     symbol: <ticker>
+#     slip44: <BIP44 coin type>
+#     hd_path: <BIP44 derivation path>
+#     decimals: <decimal places>
+#     address_pattern: <regex for validation>
+#     explorer_url: <block explorer URL>
+#     rpc_url: <RPC endpoint>
+#     curve: <secp256k1|ed25519|sr25519>
+#     native_token: <native currency symbol>

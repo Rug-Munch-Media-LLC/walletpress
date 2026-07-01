@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify — WalletPress BIP39 Test Vectors</title>
+<meta name="description" content="Verify WalletPress produces the same addresses as MetaMask, Ledger, Phantom.">
+<meta name="robots" content="index, follow">
+<style>
+:root{--bg:#050508;--bg1:#0a0a12;--bg2:#11111a;--bg3:#181825;--border:#222233;--accent:#c58e4b;--accent2:#d4a76a;--gold:#c58e4b;--fg:#e2e8f0;--fg2:#94a3b8;--fg3:#64748b;--success:#10b981;--error:#ef4444;--font:'Inter',-apple-system,sans-serif;--mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--fg);line-height:1.7;padding:40px 24px}
+.container{max-width:760px;margin:0 auto}
+h1{font-size:28px;margin-bottom:8px}
+h2{font-size:18px;margin:28px 0 12px;color:var(--accent)}
+p{color:var(--fg2);font-size:14px;margin-bottom:12px}
+.back{display:inline-block;margin-bottom:24px;color:var(--accent2);font-size:14px}
+.vector-box{background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px}
+.vector-box .mnemonic{font-family:var(--mono);font-size:13px;color:var(--accent2);background:var(--bg2);padding:8px 12px;border-radius:4px;margin-bottom:12px;word-break:break-all}
+.vector-box th,.vector-box td{text-align:left;padding:8px 12px;font-size:13px;border-bottom:1px solid var(--border);font-family:var(--mono)}
+.vector-box th{color:var(--fg3);font-weight:500;font-size:12px;text-transform:uppercase}
+.verify-btn{background:var(--gold);color:#0a0a0a;border:none;padding:8px 18px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;margin-top:8px}
+.verify-btn:hover{background:var(--accent2)}
+.input-group{margin-bottom:16px}
+.input-group label{display:block;font-size:13px;font-weight:500;color:var(--fg2);margin-bottom:6px}
+.input-group textarea,.input-group select{width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-family:var(--mono);font-size:13px}
+.result-box{background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:12px;display:none}
+.result-box.visible{display:block}
+.result-box .match{color:var(--success);font-weight:600}
+</style>
+</head>
+<body>
+<div class="container">
+<a href="/" class="back">← Back to WalletPress</a>
+<h1>Trust, But Verify</h1>
+<p>WalletPress is open source. Every address uses BIP39/BIP32/BIP44 — the same standards as Ledger, MetaMask, and every serious wallet.</p>
+<p><strong>You don't need to trust us.</strong> Take a mnemonic below, enter it in your wallet, and compare addresses.</p>
+
+<h2>Known Test Vectors</h2>
+<div class="vector-box">
+<h3>Vector #1 — 12-word</h3>
+<div class="mnemonic">abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about</div>
+<table><tr><th>Chain</th><th>Address</th></tr>
+<tr><td>Ethereum</td><td>0x9858EfFD232B4033E47d90003D41EC34EcaEda94</td></tr>
+<tr><td>Bitcoin</td><td>1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA</td></tr>
+<tr><td>Solana</td><td>HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk</td></tr>
+</table></div>
+
+<div class="vector-box">
+<h3>Vector #2 — 24-word</h3>
+<div class="mnemonic">abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art</div>
+<table><tr><th>Chain</th><th>Address</th></tr>
+<tr><td>Ethereum</td><td>0xF278cF59F82eDcf871d630F28EcC8056f25C1cdb</td></tr>
+<tr><td>Bitcoin</td><td>1KBdbBJRVYffWHWWZ1moECfdVBSEnDpLHi</td></tr>
+<tr><td>Solana</td><td>3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx</td></tr>
+</table></div>
+
+<h2>Verify Your Own</h2>
+<div class="input-group">
+<label>Mnemonic Phrase</label>
+<textarea id="verify-mnemonic" rows="3" placeholder="Enter your mnemonic..."></textarea>
+</div>
+<div class="input-group">
+<label>Chain</label>
+<select id="verify-chain">
+<option value="eth">Ethereum</option>
+<option value="btc">Bitcoin</option>
+<option value="sol">Solana</option>
+<option value="base">Base</option>
+<option value="polygon">Polygon</option>
+<option value="bsc">BNB Chain</option>
+<option value="arbitrum">Arbitrum</option>
+</select>
+</div>
+<button class="verify-btn" onclick="verifyMnemonic()">Verify Address</button>
+<div id="verify-result" class="result-box"></div>
+
+<h2>Proof of Generation</h2>
+<p>Every WalletPress wallet gets a cryptographic attestation proving its creation time, code version, and key integrity. Merkle roots can be sealed on-chain.</p>
+<p>Check at <code>/api/v1/proof/verify/{wallet_id}</code>.</p>
+
+<p style="margin-top:40px;font-size:12px;color:var(--fg3)">Rug Munch Media LLC &middot; Wyoming, USA</p>
+</div>
+
+<script>
+async function verifyMnemonic() {
+  const m = document.getElementById('verify-mnemonic').value.trim();
+  const c = document.getElementById('verify-chain').value;
+  const r = document.getElementById('verify-result');
+  if (!m) { r.className = 'result-box visible'; r.innerHTML = '<p style="color:var(--error)">Enter a mnemonic.</p>'; return; }
+  r.className = 'result-box visible';
+  r.innerHTML = '<p>Verifying...</p>';
+  try {
+    const resp = await fetch('/api/v1/test-vectors/verify?mnemonic=' + encodeURIComponent(m) + '&chain=' + c);
+    const d = await resp.json();
+    if (d.error) { r.innerHTML = '<p style="color:var(--error)">' + d.error + '</p>'; return; }
+    r.innerHTML = '<p><strong>Address:</strong></p><p style="font-family:var(--mono);font-size:16px;color:var(--accent2);word-break:break-all;padding:8px;background:var(--bg2);border-radius:4px">' + d.address + '</p><p><strong>Path:</strong> <code>' + d.derivation_path + '</code></p><p class="match">BIP39/BIP32/BIP44 compliant</p>';
+  } catch (e) {
+    r.innerHTML = '<p style="color:var(--error)">Error: ' + e.message + '</p>';
+  }
+}
+</script>
+</body>
+</html>

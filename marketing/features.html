@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Features — WalletPress · 30-Chain Wallet Generator</title>
+<meta name="description" content="Everything WalletPress can do — multi-chain generation, encrypted vault, HD wallets, bulk generation, paper wallets, key rotation, Shamir MPC, and more.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,510;14..32,590;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --bg2: #0c0d0f;
+  --bg3: #121317;
+  --bg4: #181a1f;
+  --border: rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.09);
+  --fg: #f7f8f8;
+  --fg2: #9ca0a8;
+  --fg3: #5f636b;
+  --accent: #f0a030;
+  --accent2: #d48c1e;
+  --accent-glow: rgba(240,160,48,0.12);
+  --accent-glow2: rgba(240,160,48,0.2);
+  --cyan: #22d3ee;
+  --purple: #8b5cf6;
+  --green: #22c55e;
+  --red: #ef4444;
+  --radius: 6px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+  --nav-h: 52px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);line-height:1.5;-webkit-font-smoothing:antialiased;font-feature-settings:'cv01','ss03';overflow-x:hidden}
+::selection{background:rgba(240,160,48,0.3);color:var(--fg)}
+img,svg{display:block;max-width:100%}
+
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease-out,transform .6s ease-out}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--nav-h);background:rgba(8,9,10,0.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1200px;margin:0 auto;padding:0 20px;height:100%;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;color:var(--fg);text-decoration:none;letter-spacing:-0.02em}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:24px}
+.nav-links a{color:var(--fg2);text-decoration:none;font-size:13px;font-weight:510;transition:color .15s}
+.nav-links a:hover{color:var(--fg)}
+.nav-links .active{color:var(--accent)}
+.nav-cta{padding:6px 16px!important;border-radius:var(--radius)!important;background:var(--accent)!important;color:#08090a!important;font-weight:590!important;font-size:13px!important}
+.nav-cta:hover{background:var(--accent2)!important;color:#08090a!important}
+.hamburger{display:none;flex-direction:column;gap:4px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{display:block;width:20px;height:1.5px;background:var(--fg2);transition:.2s}
+.hamburger.open span:nth-child(1){transform:rotate(45deg) translate(4px,4px)}
+.hamburger.open span:nth-child(2){opacity:0}
+.hamburger.open span:nth-child(3){transform:rotate(-45deg) translate(4px,-4px)}
+.mobile-menu{display:none;position:fixed;top:var(--nav-h);left:0;right:0;bottom:0;background:var(--bg);z-index:99;padding:32px 20px;flex-direction:column;gap:20px}
+.mobile-menu.open{display:flex}
+.mobile-menu a{color:var(--fg2);text-decoration:none;font-size:18px;font-weight:510}
+.mobile-menu .nav-cta{display:inline-block;text-align:center;margin-top:8px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border-radius:var(--radius);font-size:14px;font-weight:590;text-decoration:none;transition:all .2s;cursor:pointer;border:none;font-family:inherit;letter-spacing:-0.01em}
+.btn-primary{background:var(--accent);color:#08090a}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 8px 24px var(--accent-glow)}
+.btn-secondary{background:rgba(255,255,255,0.04);color:var(--fg);border:1px solid var(--border2)}
+.btn-secondary:hover{background:rgba(255,255,255,0.07)}
+.btn-lg{padding:14px 28px;font-size:15px}
+
+section{padding:80px 20px}
+@media(min-width:768px){section{padding:100px 32px}}
+section.alt{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.container{max-width:1100px;margin:0 auto}
+
+/* SECTION HEADER */
+.section-header{text-align:center;margin-bottom:56px}
+.section-label{display:inline-block;font-size:11px;font-weight:590;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent);margin-bottom:12px}
+.section-header h2{font-size:clamp(26px,4vw,38px);font-weight:700;letter-spacing:-0.02em;margin-bottom:12px}
+.section-header p{color:var(--fg2);font-size:15px;max-width:520px;margin:0 auto;line-height:1.6}
+
+/* HERO */
+.hero{min-height:35vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:120px 20px 60px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-30%;left:-50%;width:200%;height:160%;background:radial-gradient(ellipse at 50% 0%,var(--accent-glow),transparent 50%);opacity:0.2;pointer-events:none}
+.hero-content{position:relative;z-index:1;max-width:600px}
+.hero-breadcrumb{font-size:12px;color:var(--fg3);margin-bottom:16px}
+.hero-breadcrumb a{color:var(--fg3);text-decoration:none;transition:color .15s}
+.hero-breadcrumb a:hover{color:var(--fg2)}
+.hero h1{font-size:clamp(28px,5vw,44px);font-weight:700;line-height:1.1;letter-spacing:-0.03em;margin-bottom:12px}
+.hero p{color:var(--fg2);font-size:15px;margin:0 auto 28px;line-height:1.6;font-weight:400}
+
+/* CATEGORY TABS */
+.cat-tabs{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:48px}
+.cat-tab{padding:8px 18px;border-radius:var(--radius-pill);font-size:12px;font-weight:510;color:var(--fg3);background:var(--bg2);border:1px solid var(--border);cursor:pointer;transition:all .15s;font-family:inherit}
+.cat-tab:hover{color:var(--fg2);border-color:var(--border2)}
+.cat-tab.active{background:var(--accent-glow);color:var(--accent);border-color:var(--accent-glow2)}
+
+/* FEATURE GRID */
+.feature-grid{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:64px}
+@media(min-width:640px){.feature-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1024px){.feature-grid{grid-template-columns:repeat(3,1fr)}}
+.feature-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl);padding:32px 28px;transition:all .25s;position:relative;overflow:hidden}
+.feature-card:hover{border-color:var(--border2);background:var(--bg3);transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,0.2)}
+.feature-card:hover .feature-icon{background:var(--accent);color:var(--bg)}
+.feature-card .pro-badge{position:absolute;top:14px;right:14px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-glow);color:var(--accent);border:1px solid var(--accent-glow2)}
+.feature-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:20px;font-size:20px;transition:all .25s}
+.feature-card h3{font-size:16px;font-weight:590;margin-bottom:6px;letter-spacing:-0.01em}
+.feature-card p{color:var(--fg2);font-size:13px;line-height:1.7;margin-bottom:12px}
+.feature-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.feature-tag{font-size:10px;padding:2px 8px;border-radius:var(--radius-pill);background:var(--bg3);color:var(--fg3);border:1px solid var(--border);font-weight:510}
+
+/* STATS ROW */
+.stats-row{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:800px;margin:0 auto}
+@media(min-width:640px){.stats-row{grid-template-columns:repeat(4,1fr)}}
+.stat-item{text-align:center;padding:28px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl)}
+.stat-num{font-size:clamp(28px,5vw,40px);font-weight:700;color:var(--accent);letter-spacing:-0.03em;line-height:1}
+.stat-label{font-size:12px;color:var(--fg3);margin-top:6px;font-weight:510}
+
+/* COMPARISON TABLE */
+.compare-wrap{max-width:900px;margin:0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.compare-table{width:100%;border-collapse:collapse;font-size:13px}
+.compare-table th{text-align:left;padding:14px 16px;font-size:11px;font-weight:590;text-transform:uppercase;letter-spacing:0.05em;color:var(--fg3);border-bottom:1px solid var(--border);background:var(--bg)}
+.compare-table th:first-child{text-align:left;color:var(--fg2);font-size:12px}
+.compare-table td{padding:12px 16px;border-bottom:1px solid var(--border);color:var(--fg2)}
+.compare-table td:first-child{font-weight:510;color:var(--fg)}
+.compare-table .yes{color:var(--green);font-weight:590}
+.compare-table .no{color:var(--fg3)}
+.compare-table tr:hover td{background:var(--bg2)}
+.compare-table .highlight td{background:var(--accent-glow)}
+.compare-table .highlight td:first-child{color:var(--accent)}
+
+/* CTA BAND */
+.cta-band{text-align:center;padding:64px 20px;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.cta-band h2{font-size:clamp(24px,4vw,32px);font-weight:700;margin-bottom:12px;letter-spacing:-0.02em}
+.cta-band p{color:var(--fg2);font-size:15px;margin-bottom:24px}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border);padding:40px 20px;text-align:center}
+.footer-grid{display:flex;justify-content:center;flex-wrap:wrap;gap:24px;margin-bottom:20px}
+.footer-grid a{color:var(--fg3);text-decoration:none;font-size:12px;font-weight:510;transition:color .15s}
+.footer-grid a:hover{color:var(--fg2)}
+footer .copy{color:var(--fg3);font-size:11px}
+
+@media(max-width:768px){
+  .nav-links{display:none}
+  .hamburger{display:flex}
+  .hero h1{font-size:28px}
+  section{padding:60px 16px}
+  .cat-tabs{gap:4px}
+  .cat-tab{padding:6px 12px;font-size:11px}
+  .compare-table td,.compare-table th{padding:8px 10px;font-size:11px}
+  .feature-card{padding:24px 20px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/index.html" class="logo"><span class="logo-dot"></span>WalletPress</a>
+    <div class="nav-links">
+      <a href="/index.html">Home</a>
+      <a href="/features.html" class="active">Features</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/about.html">About</a>
+      <a href="/buy.html" class="nav-cta">Buy — $49</a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.toggle('open');this.classList.toggle('open')" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <a href="/index.html">Home</a>
+  <a href="/features.html">Features</a>
+  <a href="/docs.html">Docs</a>
+  <a href="/about.html">About</a>
+  <a href="/buy.html" class="nav-cta">Buy — $49</a>
+</div>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-breadcrumb"><a href="/index.html">Home</a> / Features</div>
+    <h1>Everything WalletPress Can Do</h1>
+    <p>30 chains. 86 API routes. One Docker Compose command. Built for developers who need wallet infrastructure that just works.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container reveal">
+    <div class="stats-row">
+      <div class="stat-item"><div class="stat-num">30</div><div class="stat-label">Blockchains</div></div>
+      <div class="stat-item"><div class="stat-num">13</div><div class="stat-label">Chain Families</div></div>
+      <div class="stat-item"><div class="stat-num">86</div><div class="stat-label">API Routes</div></div>
+      <div class="stat-item"><div class="stat-num">$49</div><div class="stat-label">One-Time</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="container reveal">
+    <div class="section-header">
+      <div class="section-label">Wallet Generation</div>
+      <h2>Generate wallets on any chain</h2>
+      <p>One consistent interface across every major blockchain. Same CLI command, same API shape, 30 different chains.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔑</div>
+        <h3>Multi-Chain Generation</h3>
+        <p>Generate wallets on 30 blockchains across 13 chain families — EVM, Solana, Bitcoin, Cosmos, Substrate, and more. One consistent API and CLI.</p>
+        <div class="feature-tags"><span class="feature-tag">30 chains</span><span class="feature-tag">EVM</span><span class="feature-tag">Solana</span><span class="feature-tag">BTC</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <h3>Bulk Generation</h3>
+        <p>Generate up to 1,000 wallets in a single API call. Async background processing with progress tracking. Perfect for airdrops, testnet distribution, and token launches.</p>
+        <div class="feature-tags"><span class="feature-tag">1,000/batch</span><span class="feature-tag">Async</span><span class="feature-tag">Progress tracking</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌳</div>
+        <h3>HD Wallet Support</h3>
+        <p>Import a BIP39 mnemonic and derive unlimited wallets deterministically. Full BIP32/BIP39/BIP44/BIP84 compliance across all supported chains.</p>
+        <div class="feature-tags"><span class="feature-tag">BIP39</span><span class="feature-tag">BIP44</span><span class="feature-tag">BIP84</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔀</div>
+        <h3>Unlinkable Wallets <span class="pro-badge">PRO</span></h3>
+        <p>Generate N wallets with independent entropy per wallet. No common seed, no derivation path. Cryptographically provable independence — on-chain analysis cannot link them.</p>
+        <div class="feature-tags"><span class="feature-tag">Independent entropy</span><span class="feature-tag">Sybil resistant</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📄</div>
+        <h3>Paper Wallets</h3>
+        <p>Generate printable paper wallets with QR codes. Cold storage with zero digital footprint. HTML output ready for printing or saving offline.</p>
+        <div class="feature-tags"><span class="feature-tag">QR codes</span><span class="feature-tag">Printable</span><span class="feature-tag">Offline</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3>Wallet Validation</h3>
+        <p>Validate any wallet address against its chain's format rules. Detect invalid addresses before sending funds. Supports all 30 chains with chain-specific validation logic.</p>
+        <div class="feature-tags"><span class="feature-tag">30 chains</span><span class="feature-tag">Format check</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container reveal">
+    <div class="section-header">
+      <div class="section-label">Security</div>
+      <h2>Military-grade key protection</h2>
+      <p>Your private keys are encrypted at rest. Optional client-side encryption means even we can't read them. You hold the keys — always.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Encrypted Vault</h3>
+        <p>All private keys encrypted at rest using Fernet symmetric encryption. Auto-generated encryption key with strict file permissions (chmod 600). Zero plaintext storage.</p>
+        <div class="feature-tags"><span class="feature-tag">Fernet</span><span class="feature-tag">AES-128-CBC</span><span class="feature-tag">HMAC</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛡️</div>
+        <h3>Client-Side Encryption</h3>
+        <p>Optional passphrase-based encryption. Keys are encrypted in your browser before reaching the server. The server never sees unencrypted keys — true zero-knowledge architecture.</p>
+        <div class="feature-tags"><span class="feature-tag">Zero-knowledge</span><span class="feature-tag">AES-256-GCM</span><span class="feature-tag">Argon2</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h3>Key Rotation</h3>
+        <p>Scheduled or on-demand key rotation with full audit trail. Every rotation event is timestamped and logged. Previous keys remain encrypted in the vault for recovery.</p>
+        <div class="feature-tags"><span class="feature-tag">Audit trail</span><span class="feature-tag">Scheduled</span><span class="feature-tag">On-demand</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🧩</div>
+        <h3>Shamir MPC Split <span class="pro-badge">PRO</span></h3>
+        <p>Split private keys into N shares using Shamir's Secret Sharing over GF(256). Reconstruct from threshold. Pure Python — no external dependencies.</p>
+        <div class="feature-tags"><span class="feature-tag">MPC</span><span class="feature-tag">GF(256)</span><span class="feature-tag">N-of-M</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <h3>API Key Access Control</h3>
+        <p>All vault endpoints protected by X-API-Key authentication. Generate and rotate API keys. Role-based access control for multi-user deployments.</p>
+        <div class="feature-tags"><span class="feature-tag">RBAC</span><span class="feature-tag">API keys</span><span class="feature-tag">Multi-user</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">✅</div>
+        <h3>On-Chain Verification</h3>
+        <p>Every wallet address is independently verified against the chain's canonical library. Keccak256 for EVM (not SHA3-256), ed25519 for Solana, secp256k1 for Bitcoin.</p>
+        <div class="feature-tags"><span class="feature-tag">Keccak256</span><span class="feature-tag">ed25519</span><span class="feature-tag">secp256k1</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="container reveal">
+    <div class="section-header">
+      <div class="section-label">Operations</div>
+      <h2>Built for production workflows</h2>
+      <p>CLI, REST API, Docker Compose — integrate WalletPress into your pipeline however you need.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">⌨️</div>
+        <h3>CLI Tool</h3>
+        <p>Full-featured command-line interface. Generate, list, rotate, export — all from the terminal. Pipe-friendly output for scripting and automation.</p>
+        <div class="feature-tags"><span class="feature-tag">Bash</span><span class="feature-tag">Pipe-friendly</span><span class="feature-tag">10 commands</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <h3>REST API</h3>
+        <p>86 documented API endpoints. OpenAPI/Swagger docs included. JSON request/response format. Works with curl, Python requests, any HTTP client.</p>
+        <div class="feature-tags"><span class="feature-tag">FastAPI</span><span class="feature-tag">OpenAPI</span><span class="feature-tag">JSON</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🐳</div>
+        <h3>Docker Compose</h3>
+        <p>One command deployment: <code>docker compose up -d</code>. Full stack spins up in seconds. Volume-persisted vault data. Works on any Linux server.</p>
+        <div class="feature-tags"><span class="feature-tag">Docker</span><span class="feature-tag">Port 8000</span><span class="feature-tag">Persist data</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Gas Dashboard</h3>
+        <p>Live gas estimates for all 7 EVM chains + static estimates for all 23 non-EVM chains. Chain-specific fee units (sat/vB, lamports/sig, drops).</p>
+        <div class="feature-tags"><span class="feature-tag">30 chains</span><span class="feature-tag">Live + static</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📝</div>
+        <h3>Audit Trail</h3>
+        <p>Every wallet operation is logged: generation, rotation, export, deletion. Timestamped, queryable, immutable. Know exactly when and how every key was used.</p>
+        <div class="feature-tags"><span class="feature-tag">Immutable</span><span class="feature-tag">Queryable</span><span class="feature-tag">Timestamped</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <h3>Plugin System</h3>
+        <p>Event hooks for custom logic. Trigger webhooks on wallet generation, rotation, or deletion. Extend WalletPress with your own business logic.</p>
+        <div class="feature-tags"><span class="feature-tag">Hooks</span><span class="feature-tag">Webhooks</span><span class="feature-tag">Extensible</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container reveal">
+    <div class="section-header">
+      <div class="section-label">Enterprise</div>
+      <h2>Scale to millions of wallets</h2>
+      <p>No rate limits. No per-wallet fees. Your hardware determines throughput — not a pricing tier.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🏢</div>
+        <h3>White-Label Ready</h3>
+        <p>Rebrand WalletPress as your own product. Full source code access. Resell to your customers. Custom chain additions available for enterprise plans.</p>
+        <div class="feature-tags"><span class="feature-tag">Rebrand</span><span class="feature-tag">Resell</span><span class="feature-tag">Custom chains</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>Multi-Signature</h3>
+        <p>Configure M-of-N signing schemes for high-value wallets. Require multiple approvals before any transaction is signed.</p>
+        <div class="feature-tags"><span class="feature-tag">M-of-N</span><span class="feature-tag">Approval flow</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💸</div>
+        <h3>Transaction Builder</h3>
+        <p>Build and sign transactions programmatically. Specify recipient, amount, gas — get back a signed raw transaction ready to broadcast.</p>
+        <div class="feature-tags"><span class="feature-tag">Raw tx</span><span class="feature-tag">Signing</span><span class="feature-tag">Broadcast</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🚨</div>
+        <h3>Alert System</h3>
+        <p>Configurable alerts for wallet events: new generation, rotation, export, any vault access. Webhook, email, or Slack notifications.</p>
+        <div class="feature-tags"><span class="feature-tag">Webhooks</span><span class="feature-tag">Email</span><span class="feature-tag">Slack</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <h3>Reports & Analytics</h3>
+        <p>Wallet health scores, generation statistics, vault usage metrics. Export to CSV/JSON. Monitor your wallet infrastructure at a glance.</p>
+        <div class="feature-tags"><span class="feature-tag">Health scores</span><span class="feature-tag">CSV export</span><span class="feature-tag">Metrics</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>No Rate Limits</h3>
+        <p>Your server, your rules. Generate as many wallets as your hardware can handle. No throttling, no API quotas, no "upgrade to unlock."</p>
+        <div class="feature-tags"><span class="feature-tag">Unlimited</span><span class="feature-tag">Self-hosted</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="container reveal">
+    <div class="section-header">
+      <div class="section-label">How It Compares</div>
+      <h2>WalletPress vs. the alternatives</h2>
+      <p>Why developers choose WalletPress over hosted APIs and manual scripting.</p>
+    </div>
+    <div class="compare-wrap">
+      <table class="compare-table">
+        <thead>
+          <tr><th>Capability</th><th style="color:var(--accent);font-weight:700">WalletPress</th><th>Hosted APIs</th><th>Manual Scripting</th></tr>
+        </thead>
+        <tbody>
+          <tr class="highlight"><td>Chains supported</td><td class="yes">30</td><td class="no">5-15</td><td class="no">Varies</td></tr>
+          <tr><td>One-time cost</td><td class="yes">$49</td><td class="no">$50-500/mo</td><td class="yes">$0</td></tr>
+          <tr><td>Self-hosted</td><td class="yes">Yes</td><td class="no">No</td><td class="yes">Yes</td></tr>
+          <tr class="highlight"><td>Encrypted vault</td><td class="yes">Built-in</td><td class="no">Maybe</td><td class="no">DIY</td></tr>
+          <tr><td>HD wallet derivation</td><td class="yes">BIP39/44/84</td><td class="no">Sometimes</td><td class="no">Manual</td></tr>
+          <tr><td>Bulk generation</td><td class="yes">1,000+/batch</td><td class="no">Rate limited</td><td class="no">Slow</td></tr>
+          <tr class="highlight"><td>Paper wallets</td><td class="yes">Built-in</td><td class="no">No</td><td class="no">DIY</td></tr>
+          <tr><td>Key rotation + audit</td><td class="yes">Built-in</td><td class="no">No</td><td class="no">Manual</td></tr>
+          <tr><td>Shamir MPC split</td><td class="yes">Built-in</td><td class="no">No</td><td class="no">Complex</td></tr>
+          <tr class="highlight"><td>On-chain verification</td><td class="yes">All 30 chains</td><td class="no">Partial</td><td class="no">Error-prone</td></tr>
+          <tr><td>No DRM</td><td class="yes">Full source</td><td class="no">N/A</td><td class="yes">Your code</td></tr>
+          <tr><td>Lifetime updates</td><td class="yes">Included</td><td class="no">Subscription</td><td class="no">DIY</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="container reveal">
+    <h2>Ready to stop building wallet infra from scratch?</h2>
+    <p>30 chains. 86 API routes. Full source code. $49, forever.</p>
+    <a href="/buy.html" class="btn btn-primary btn-lg">Buy WalletPress — $49</a>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-grid">
+    <a href="/docs.html">Documentation</a>
+    <a href="/features.html">Features</a>
+    <a href="/buy.html">Pricing</a>
+    <a href="/about.html">About</a>
+    <a href="/contact.html">Contact</a>
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+  </div>
+  <p class="copy">© 2026 Rug Munch Media LLC. Made in Wyoming.</p>
+</footer>
+
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

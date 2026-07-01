@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  WP_ADMIN_KEY: ci-admin-key-for-testing
+  WP_VAULT_PASSWORD: ci-vault-password-for-testing
+  WP_DATA_DIR: /tmp/wp_ci_data
+  WP_RATE_LIMIT: "0"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.lock
+          pip install ruff mypy
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format check
+        run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.lock
+      - name: Run tests
+        run: python3 -m pytest tests/ -v --tb=short --timeout=120
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install bandit gitleaks
+      - name: Bandit
+        run: bandit -r . -x tests
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2

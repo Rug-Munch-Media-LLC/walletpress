@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact — WalletPress · Get in Touch</title>
+<meta name="description" content="Contact the WalletPress team. Support, sales, and general inquiries. We respond within hours.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,510;14..32,590;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#08090a;--bg2:#0c0d0f;--bg3:#121317;--bg4:#181a1f;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.09);
+  --fg:#f7f8f8;--fg2:#9ca0a8;--fg3:#5f636b;
+  --accent:#f0a030;--accent2:#d48c1e;--accent-glow:rgba(240,160,48,0.12);--accent-glow2:rgba(240,160,48,0.2);
+  --cyan:#22d3ee;--green:#22c55e;--purple:#8b5cf6;
+  --radius:6px;--radius-lg:12px;--radius-xl:16px;--radius-pill:9999px;--nav-h:52px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);line-height:1.5;-webkit-font-smoothing:antialiased;font-feature-settings:'cv01','ss03';overflow-x:hidden}
+::selection{background:rgba(240,160,48,0.3);color:var(--fg)}
+img{display:block;max-width:100%}
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease-out,transform .6s ease-out}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--nav-h);background:rgba(8,9,10,0.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1200px;margin:0 auto;padding:0 20px;height:100%;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;color:var(--fg);text-decoration:none;letter-spacing:-0.02em}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:24px}
+.nav-links a{color:var(--fg2);text-decoration:none;font-size:13px;font-weight:510;transition:color .15s}
+.nav-links a:hover{color:var(--fg)}
+.nav-cta{padding:6px 16px!important;border-radius:var(--radius)!important;background:var(--accent)!important;color:#08090a!important;font-weight:590!important;font-size:13px!important}
+.nav-cta:hover{background:var(--accent2)!important;color:#08090a!important}
+.hamburger{display:none;flex-direction:column;gap:4px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{display:block;width:20px;height:1.5px;background:var(--fg2);transition:.2s}
+.hamburger.open span:nth-child(1){transform:rotate(45deg) translate(4px,4px)}
+.hamburger.open span:nth-child(2){opacity:0}
+.hamburger.open span:nth-child(3){transform:rotate(-45deg) translate(4px,-4px)}
+.mobile-menu{display:none;position:fixed;top:var(--nav-h);left:0;right:0;bottom:0;background:var(--bg);z-index:99;padding:32px 20px;flex-direction:column;gap:20px}
+.mobile-menu.open{display:flex}
+.mobile-menu a{color:var(--fg2);text-decoration:none;font-size:18px;font-weight:510}
+.mobile-menu .nav-cta{display:inline-block;text-align:center;margin-top:8px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border-radius:var(--radius);font-size:14px;font-weight:590;text-decoration:none;transition:all .2s;cursor:pointer;border:none;font-family:inherit;letter-spacing:-0.01em}
+.btn-primary{background:var(--accent);color:#08090a}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 8px 24px var(--accent-glow)}
+.btn-secondary{background:rgba(255,255,255,0.04);color:var(--fg);border:1px solid var(--border2)}
+.btn-secondary:hover{background:rgba(255,255,255,0.07)}
+.btn-lg{padding:14px 28px;font-size:15px}
+
+section{padding:80px 20px}
+@media(min-width:768px){section{padding:100px 32px}}
+.container{max-width:800px;margin:0 auto}
+
+.hero{min-height:30vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:120px 20px 40px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-30%;left:-50%;width:200%;height:160%;background:radial-gradient(ellipse at 50% 0%,var(--accent-glow),transparent 50%);opacity:0.15;pointer-events:none}
+.hero-content{position:relative;z-index:1;max-width:550px}
+.hero-breadcrumb{font-size:12px;color:var(--fg3);margin-bottom:16px}
+.hero-breadcrumb a{color:var(--fg3);text-decoration:none;transition:color .15s}
+.hero-breadcrumb a:hover{color:var(--fg2)}
+.hero h1{font-size:clamp(26px,5vw,40px);font-weight:700;line-height:1.1;letter-spacing:-0.03em;margin-bottom:12px}
+.hero p{color:var(--fg2);font-size:15px;margin:0 auto;line-height:1.6}
+
+/* CONTACT CARDS */
+.contact-grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:640px){.contact-grid{grid-template-columns:repeat(3,1fr)}}
+.contact-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl);padding:32px 28px;text-align:center;transition:all .25s}
+.contact-card:hover{border-color:var(--border2);transform:translateY(-2px)}
+.contact-icon{font-size:36px;margin-bottom:16px}
+.contact-card h3{font-size:15px;font-weight:590;margin-bottom:8px}
+.contact-card p{font-size:13px;color:var(--fg2);line-height:1.6;margin-bottom:12px}
+.contact-card a{color:var(--accent);text-decoration:none;font-family:'JetBrains Mono',monospace;font-size:13px;transition:color .15s}
+.contact-card a:hover{text-decoration:underline}
+.contact-card .response{font-size:11px;color:var(--fg3);margin-top:8px}
+
+/* RESPONSE TIMES */
+.info-box{max-width:600px;margin:40px auto 0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-xl);padding:28px 32px}
+.info-box h3{font-size:14px;font-weight:590;margin-bottom:12px;text-align:center}
+.time-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.time-row:last-child{border-bottom:none}
+.time-row .label{color:var(--fg2)}
+.time-row .val{color:var(--fg);font-weight:510}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border);padding:40px 20px;text-align:center}
+.footer-grid{display:flex;justify-content:center;flex-wrap:wrap;gap:24px;margin-bottom:20px}
+.footer-grid a{color:var(--fg3);text-decoration:none;font-size:12px;font-weight:510;transition:color .15s}
+.footer-grid a:hover{color:var(--fg2)}
+footer .copy{color:var(--fg3);font-size:11px}
+
+@media(max-width:768px){
+  .nav-links{display:none}
+  .hamburger{display:flex}
+  .hero h1{font-size:26px}
+  section{padding:60px 16px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/index.html" class="logo"><span class="logo-dot"></span>WalletPress</a>
+    <div class="nav-links">
+      <a href="/index.html">Home</a>
+      <a href="/features.html">Features</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/about.html">About</a>
+      <a href="/buy.html" class="nav-cta">Buy — $49</a>
+    </div>
+    <button class="hamburger" onclick="document.getElementById('mobile-menu').classList.toggle('open');this.classList.toggle('open')" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+<div class="mobile-menu" id="mobile-menu">
+  <a href="/index.html">Home</a>
+  <a href="/features.html">Features</a>
+  <a href="/docs.html">Docs</a>
+  <a href="/about.html">About</a>
+  <a href="/buy.html" class="nav-cta">Buy — $49</a>
+</div>
+
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-breadcrumb"><a href="/index.html">Home</a> / Contact</div>
+    <h1>Get in Touch</h1>
+    <p>Questions, support, custom deployments, or partnership inquiries. We respond fast.</p>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="container reveal">
+    <div class="contact-grid">
+      <div class="contact-card">
+        <div class="contact-icon">🛟</div>
+        <h3>Support</h3>
+        <p>Technical issues, deployment help, bug reports.</p>
+        <a href="mailto:support@walletpress.cc">support@walletpress.cc</a>
+        <div class="response">Typically &lt; 4 hours</div>
+      </div>
+      <div class="contact-card">
+        <div class="contact-icon">💳</div>
+        <h3>Sales &amp; Payments</h3>
+        <p>Purchase questions, crypto payment confirmation, invoices.</p>
+        <a href="mailto:pay@walletpress.cc">pay@walletpress.cc</a>
+        <div class="response">Typically &lt; 1 hour</div>
+      </div>
+      <div class="contact-card">
+        <div class="contact-icon">🤝</div>
+        <h3>Partnerships</h3>
+        <p>White-label, enterprise, custom chains, integrations.</p>
+        <a href="mailto:sales@walletpress.cc">sales@walletpress.cc</a>
+        <div class="response">Typically &lt; 24 hours</div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <h3>Expected Response Times</h3>
+      <div class="time-row">
+        <span class="label">Crypto payment confirmation</span>
+        <span class="val">1–3 minutes</span>
+      </div>
+      <div class="time-row">
+        <span class="label">Support email response</span>
+        <span class="val">&lt; 4 hours</span>
+      </div>
+      <div class="time-row">
+        <span class="label">Sales / enterprise inquiry</span>
+        <span class="val">&lt; 24 hours</span>
+      </div>
+      <div class="time-row">
+        <span class="label">Refund processing</span>
+        <span class="val">&lt; 48 hours</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-grid">
+    <a href="/docs.html">Documentation</a>
+    <a href="/features.html">Features</a>
+    <a href="/buy.html">Pricing</a>
+    <a href="/contact.html">Contact</a>
+    <a href="/about.html">About</a>
+  </div>
+  <p class="copy">© 2026 Rug Munch Media LLC. Made in Wyoming.</p>
+</footer>
+
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

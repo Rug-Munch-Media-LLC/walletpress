@@ -1,0 +1,163 @@
+# WalletPress — 15 Improvements For Market Leadership
+
+## 1. Paper Wallet PDF (not JSON)
+
+**Problem:** `GET /chain-vault/paper-wallet/{id}` returns JSON. Nobody prints JSON.
+**Fix:** Generate a proper printable PDF with QR codes, address, private key (encrypted),
+instructions, and the Proof of Generation hash. Use `reportlab` or `weasyprint`.
+**Impact:** The #1 feature request for any wallet tool. Physical backups.
+
+## 2. Progress Streaming for Batch Generation
+
+**Problem:** `POST /generate/batch` blocks until all wallets are generated.
+For 100k wallets, the HTTP connection times out.
+**Fix:** Use Server-Sent Events (SSE) to stream progress:
+```
+POST /generate/batch/stream
+→ {"event": "progress", "data": {"done": 15000, "total": 100000}}
+→ {"event": "complete", "data": {"order_id": "...", "manifest": "..."}}
+```
+**Impact:** Enables 100k+ wallet generation without timeout issues.
+
+## 3. Wallet Import from Mnemonic (Auto-Detect Chain)
+
+**Problem:** Users paste a mnemonic but don't know which chain it's for.
+**Fix:** `/from-mnemonic` already exists but requires specifying the chain.
+Add auto-detection: paste a mnemonic, we derive addresses for ALL chains
+and highlight which ones have on-chain activity (balance > 0).
+**Impact:** "I found my old seed phrase but forgot which wallet it was for"
+is one of the most common user problems. Fixing it makes WalletPress sticky.
+
+## 4. QR Code on Every Address Response
+
+**Problem:** WalletPress generates addresses but doesn't return scannable QR codes.
+**Fix:** Add `?include_qr=true` parameter to all wallet endpoints. Return
+a base64-encoded PNG QR code alongside the address.
+**Impact:** Zero-friction address sharing. Mobile wallets scan QR codes.
+
+## 5. Webhook Delivery Log + Retry UI
+
+**Problem:** Webhooks are fire-and-forget. If delivery fails, there's no log,
+no retry, no way to see what happened.
+**Fix:** Add delivery log to the webhooks table (status, response code, latency,
+attempt count). Add `POST /webhooks/{id}/retry` endpoint. Add webhook test
+button that sends a sample event.
+**Impact:** Enterprise users need delivery guarantees. Without this, webhooks
+are unusable for production.
+
+## 6. API Key Rate Limiting (Per-Key, Not Per-IP)
+
+**Problem:** Rate limiting is per IP address. Hosted users share IPs.
+**Fix:** Add per-API-key rate limiting in the auth middleware. Each key gets
+a configurable RPM (requests per minute) based on their plan tier.
+**Impact:** Prevents one user from exhausting rate limits for others on hosted.
+
+## 7. Backup + Restore CLI Command
+
+**Problem:** The SQLite vault has no built-in backup. If the DB is corrupted,
+all wallets are lost.
+**Fix:** `walletpress backup` — exports vault + proofs + audit to a single
+encrypted archive. `walletpress restore` — restores from archive. Automated
+with cron in the deploy script.
+**Impact:** Essential for production. Nobody deploys wallet infrastructure
+without backups.
+
+## 8. Clean Error Messages (No Python Tracebacks)
+
+**Problem:** Some error responses include Python tracebacks instead of clean JSON.
+**Fix:** Audit all endpoints for bare `raise Exception(...)` vs proper
+`raise HTTPException(status_code=4xx, detail=...)`. Add a global exception
+handler that catches unhandled exceptions and returns clean JSON.
+**Impact:** Looks professional. Hides internals from attackers.
+
+## 9. Temporal Wallet Auto-Cleanup
+
+**Problem:** Temporal wallets (time-limited) are stored in an in-memory dict
+and manually released. Expired wallets accumulate.
+**Fix:** Add a background task (APScheduler) that periodically scans for
+expired temporal wallets and releases them. Log the cleanup.
+**Impact:** Memory leak fix. Without this, temporal wallets grow unbounded.
+
+## 10. Wallet Search with Full-Text
+
+**Problem:** Vault search is basic substring match on address/label.
+**Fix:** Add SQLite FTS5 full-text search on wallet addresses, labels,
+notes, and chain. `/vault?search=0x1234` returns all matching wallets.
+**Impact:** Vault with 100k+ wallets is unusable without good search.
+
+## 11. Hosted: Email Verification on Registration
+
+**Problem:** Hosted registration accepts any email without verification.
+**Fix:** Send verification email with 6-digit code. Verify before issuing API key.
+**Impact:** Prevents fake accounts, spam, and abuse of free tier.
+
+## 12. Hosted: Login Rate Limiting
+
+**Problem:** `/hosting/login` has no rate limiting. Attackers can brute force.
+**Fix:** Add exponential backoff per email (3 attempts → 30s lockout, 10 → 5min).
+**Impact:** Basic security. Login endpoints are the most attacked.
+
+## 13. Wallet Birth Certificate — Printable Provenance Page
+
+**Problem:** Proof of Generation exists but there's no human-readable output.
+**Fix:** Generate a one-page "Wallet Birth Certificate" PDF with:
+- Wallet address + QR code
+- Public key (hex)
+- Derivation path
+- Chain + network
+- Creation timestamp
+- Proof of Generation leaf hash
+- Merkle root (if committed)
+- "This wallet was generated by WalletPress Pro" seal
+**Impact:** Unique feature. No other wallet generator creates verifiable
+provenance documents. Useful for compliance, audits, and gifting wallets.
+
+## 14. Chain Auto-Detect for Imported Private Keys
+
+**Problem:** `POST /import` requires specifying the chain. Users often don't
+know which chain a private key belongs to.
+**Fix:** Derive addresses for EVM (any chain), BTC, SOL, TRX, and DOT from the
+same private key. Return all possible addresses with chain detection confidence.
+**Impact:** "I have this private key but forgot which chain" — common problem.
+
+## 15. Signed Webhook Payloads with Verifiable Delivery
+
+**Problem:** Webhooks are signed with HMAC but there's no way for the
+recipient to verify the signature was generated by our server at a
+specific time.
+**Fix:** Include in the webhook payload:
+- `timestamp` — when the event occurred
+- `event_id` — unique, monotonic
+- `signature` — HMAC-SHA256 of `event_id + timestamp + payload`
+- `signing_key_id` — which key signed it (for key rotation)
+Recipients can verify the signature using the public key at
+`/.well-known/webhook-public-key`.
+**Impact:** Webhook recipients can prove the event came from us and
+wasn't replayed. Enterprise compliance requirement.
+
+---
+
+## Implementation Priority
+
+**Week 1 (Solves real problems):**
+1. Paper wallet PDF — printable, physical backups
+2. Clean error messages — professional, secure
+3. Full-text wallet search — usable at scale
+4. Backup/restore CLI — production essential
+
+**Week 2 (Market leading):**
+5. Wallet birth certificate — unique provenance document
+6. QR codes on all addresses — mobile ready
+7. SSE progress streaming — batch at any scale
+8. Chain auto-detect on import — solves common user problem
+
+**Week 3 (Enterprise):**
+9. Webhook delivery log + retry — production reliability
+10. API key rate limiting — hosted fairness
+11. Signed webhook payloads — compliance
+12. Temporal wallet cleanup — memory safety
+
+**Week 4 (Security + Growth):**
+13. Email verification — abuse prevention
+14. Login rate limiting — brute force protection
+15. Mnemonic auto-detect — sticky feature

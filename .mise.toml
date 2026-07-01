@@ -1,0 +1,10 @@
+[tools]
+python = "3.12"
+node = "22"
+go = "latest"
+rust = "stable"
+
+[env]
+# WalletPress development environment
+WP_DATA_DIR = "./data"
+WP_AI_PROVIDER = "openrouter"

@@ -1,0 +1,77 @@
+# WalletPress Pre-commit — standardized across all Rug Munch Media projects
+# Install: pre-commit install
+# Run all: pre-commit run --all-files
+# Skip: SKIP=hook_id git commit -m "msg"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff
+        args: ["check", "--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.1.0
+    hooks:
+      - id: mypy
+        args: ["--strict", "--ignore-missing-imports"]
+        language: system
+        types: [python]
+        pass_filenames: false
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.0
+    hooks:
+      - id: gitleaks
+        args: ["detect", "--source", ".", "--verbose"]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: ["-r", "--quiet", "--skip=B101,B311"]
+        types: [python]
+
+  - repo: local
+    hooks:
+      - id: web3-safety
+        name: Web3 Mainnet Safety Guard
+        entry: ~/.local/bin/pre-commit-web3-safety
+        language: script
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+      - id: hallucination-check
+        name: AI Hallucination Checker
+        entry: ~/.local/bin/pre-commit-hallucination-check
+        language: script
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+      - id: pytest
+        name: Run Tests
+        entry: bash -c 'cd backend && python3 -m pytest tests/ -q --tb=short'
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: false
+        stages: [pre-push]

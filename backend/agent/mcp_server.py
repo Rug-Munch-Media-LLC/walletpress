@@ -16,12 +16,25 @@ from mcp.server.fastmcp import FastMCP
 from core.config import cfg
 from core.vault import WalletEntry, get_vault
 from core.agent_safety import (
-    check_action_allowed, is_killed,
-    request_confirmation, confirm_action, reject_action, list_pending,
-    check_address, check_spending_limit, record_spending,
-    audit_log, simulate_transaction,
-    kill_agent as safety_kill, resurrect_agent as safety_resurrect,
-    allowlist_add, blocklist_add, address_book_list, list_limits, audit_trail, verify_audit_chain,
+    check_action_allowed,
+    is_killed,
+    request_confirmation,
+    confirm_action,
+    reject_action,
+    list_pending,
+    check_address,
+    check_spending_limit,
+    record_spending,
+    audit_log,
+    simulate_transaction,
+    kill_agent as safety_kill,
+    resurrect_agent as safety_resurrect,
+    allowlist_add,
+    blocklist_add,
+    address_book_list,
+    list_limits,
+    audit_trail,
+    verify_audit_chain,
 )
 
 logger = logging.getLogger("wp.agent.mcp")
@@ -45,6 +58,7 @@ def _safety_check(action: str, params: dict) -> dict | None:
 
 
 import threading
+
 _HITL_SKIP_LOCAL = threading.local()
 
 
@@ -128,7 +142,9 @@ def agent_confirm(confirmation_id: str) -> dict:
 
     TOOL_MAP = {
         "wallet_generate": lambda: _confirmed_call(action, params, wallet_generate, **params),
-        "wallet_from_mnemonic": lambda: _confirmed_call(action, params, wallet_from_mnemonic, **params),
+        "wallet_from_mnemonic": lambda: _confirmed_call(
+            action, params, wallet_from_mnemonic, **params
+        ),
         "vault_delete": lambda: _confirmed_call(action, params, vault_delete, **params),
         "wallet_rotate": lambda: _confirmed_call(action, params, wallet_rotate, **params),
         "wallet_sweep": lambda: _confirmed_call(action, params, wallet_sweep, **params),
@@ -323,7 +339,9 @@ def agent_referral_status() -> dict:
 
     return {
         "revenue_mode": REVENUE_MODE.upper(),
-        "your_cost": "free (we cover referral fees)" if REVENUE_MODE == "freemium" else "you control your own codes",
+        "your_cost": "free (we cover referral fees)"
+        if REVENUE_MODE == "freemium"
+        else "you control your own codes",
         "platforms": platforms,
         "note": freemium_note,
         "secrets_redacted": redact_secrets,
@@ -414,11 +432,15 @@ def wallet_generate(chain: str, label: str = "", count: int = 1) -> dict:
         label: Optional human-readable label
         count: Number of wallets to generate (default 1, max 100)
     """
-    hitl = _write_with_hitl("wallet_generate", {"chain": chain, "label": label, "count": count},
-                            f"Generate {count} wallet(s) on {chain}")
+    hitl = _write_with_hitl(
+        "wallet_generate",
+        {"chain": chain, "label": label, "count": count},
+        f"Generate {count} wallet(s) on {chain}",
+    )
     if "confirmation_id" in hitl:
         return hitl
     from wallet_engine.generator import get_generator
+
     vault = get_vault()
     generator = get_generator(cfg.vault_password)
     wallets = []
@@ -437,8 +459,11 @@ def wallet_generate(chain: str, label: str = "", count: int = 1) -> dict:
                 return {"error": str(e), "rolled_back": created_ids}
             entry = WalletEntry(
                 id=f"wp_agent_{chain}_{int(time.time() * 1000)}_{i}",
-                chain=wallet.chain, address=wallet.address, label=wallet.label,
-                tags=wallet.tags, created_at=wallet.created_at,
+                chain=wallet.chain,
+                address=wallet.address,
+                label=wallet.label,
+                tags=wallet.tags,
+                created_at=wallet.created_at,
                 encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
                 public_key=wallet.public_key_hex,
                 derivation_path=wallet.derivation_path,
@@ -446,7 +471,14 @@ def wallet_generate(chain: str, label: str = "", count: int = 1) -> dict:
             )
             vault.put(entry)
             created_ids.append(entry.id)
-            wallets.append({"id": entry.id, "chain": entry.chain, "address": entry.address, "label": entry.label})
+            wallets.append(
+                {
+                    "id": entry.id,
+                    "chain": entry.chain,
+                    "address": entry.address,
+                    "label": entry.label,
+                }
+            )
     except Exception as e:
         # Any unexpected error — roll back partial inserts.
         for wid in created_ids:
@@ -463,12 +495,14 @@ def wallet_from_mnemonic(mnemonic: str, chains: list[str] | None = None) -> dict
         mnemonic: BIP39 seed phrase (12 or 24 words)
         chains: List of chains to derive (empty = all 55 chains)
     """
-    hitl = _write_with_hitl("wallet_from_mnemonic", {"chains": chains},
-                            "Derive wallets from a mnemonic phrase")
+    hitl = _write_with_hitl(
+        "wallet_from_mnemonic", {"chains": chains}, "Derive wallets from a mnemonic phrase"
+    )
     if hitl:
         return hitl
     from wallet_engine.chains import CHAINS
     from wallet_engine.generator import get_generator
+
     vault = get_vault()
     generator = get_generator(cfg.vault_password)
     chain_list = chains or list(CHAINS.keys())
@@ -481,10 +515,14 @@ def wallet_from_mnemonic(mnemonic: str, chains: list[str] | None = None) -> dict
             continue
         entry = WalletEntry(
             id=f"wp_mcp_mnemonic_{ck}_{int(time.time())}",
-            chain=wallet.chain, address=wallet.address, label=wallet.label,
-            tags=wallet.tags + ["from_mnemonic"], created_at=wallet.created_at,
+            chain=wallet.chain,
+            address=wallet.address,
+            label=wallet.label,
+            tags=wallet.tags + ["from_mnemonic"],
+            created_at=wallet.created_at,
             encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
-            public_key=wallet.public_key_hex, derivation_path=wallet.derivation_path,
+            public_key=wallet.public_key_hex,
+            derivation_path=wallet.derivation_path,
             encrypted=wallet.encrypted,
         )
         vault.put(entry)
@@ -626,6 +664,7 @@ async def balance_check(chain: str, address: str) -> dict:
         address: Wallet address
     """
     from routers.balance_fetcher import fetch_balance
+
     return await fetch_balance(chain, address)
 
 
@@ -639,7 +678,10 @@ def vault_balances(chain: str = "") -> dict:
     vault = get_vault()
     wallets = vault.list(chain=chain, limit=500) if chain else vault.list(limit=500)
     return {
-        "wallets": [{"id": w.id, "chain": w.chain, "address": w.address, "balance_usd": w.balance_usd} for w in wallets],
+        "wallets": [
+            {"id": w.id, "chain": w.chain, "address": w.address, "balance_usd": w.balance_usd}
+            for w in wallets
+        ],
         "total_usd": sum(w.balance_usd for w in wallets),
         "wallet_count": len(wallets),
     }
@@ -656,23 +698,33 @@ def wallet_rotate(wallet_id: str, reason: str = "agent_rotation") -> dict:
         wallet_id: ID of existing wallet
         reason: Rotation reason
     """
-    hitl = _write_with_hitl("wallet_rotate", {"wallet_id": wallet_id, "reason": reason},
-                            f"Rotate keys for wallet {wallet_id}: {reason}")
+    hitl = _write_with_hitl(
+        "wallet_rotate",
+        {"wallet_id": wallet_id, "reason": reason},
+        f"Rotate keys for wallet {wallet_id}: {reason}",
+    )
     if hitl:
         return hitl
     from wallet_engine.generator import get_generator
+
     vault = get_vault()
     old = vault.get(wallet_id)
     if not old:
         return {"error": f"Wallet {wallet_id} not found"}
     generator = get_generator(cfg.vault_password)
-    new = generator.generate(old.chain, label=f"rotation_{old.chain}_{int(time.time())}", tags=["rotated", "active"])
+    new = generator.generate(
+        old.chain, label=f"rotation_{old.chain}_{int(time.time())}", tags=["rotated", "active"]
+    )
     new_entry = WalletEntry(
         id=f"wp_rot_{old.chain}_{int(time.time())}",
-        chain=new.chain, address=new.address, label=new.label,
-        tags=new.tags, created_at=new.created_at,
+        chain=new.chain,
+        address=new.address,
+        label=new.label,
+        tags=new.tags,
+        created_at=new.created_at,
         encrypted_key=new.private_key_hex if new.encrypted else "",
-        public_key=new.public_key_hex, derivation_path=new.derivation_path,
+        public_key=new.public_key_hex,
+        derivation_path=new.derivation_path,
         encrypted=new.encrypted,
     )
     vault.put(new_entry)
@@ -720,8 +772,11 @@ def wallet_sweep(from_wallet_id: str, to_address: str) -> dict:
     if not limit_check["allowed"]:
         return {"error": f"Spending limit exceeded: {limit_check['exceeded']}"}
 
-    hitl = _write_with_hitl("wallet_sweep", {"from_wallet_id": from_wallet_id, "to_address": to_address},
-                            f"Sweep funds from {from_wallet_id} to {to_address}")
+    hitl = _write_with_hitl(
+        "wallet_sweep",
+        {"from_wallet_id": from_wallet_id, "to_address": to_address},
+        f"Sweep funds from {from_wallet_id} to {to_address}",
+    )
     if hitl:
         return hitl
 
@@ -767,6 +822,7 @@ def _evm_sweep(wallet, to_address: str, chain: str) -> dict:
 
     # Decrypt the private key from the vault
     from wallet_engine.generator import get_generator
+
     gen = get_generator(cfg.vault_password)
     if not wallet.encrypted_key or not wallet.encrypted:
         return {"error": f"Wallet {wallet.id} has no encrypted key (client-side only?)"}
@@ -842,7 +898,9 @@ def _evm_sweep(wallet, to_address: str, chain: str) -> dict:
                 "amount_wei": value_wei,
                 "amount_native": float(w3.from_wei(value_wei, "ether")),
                 "gas_cost_wei": gas_cost_wei,
-                "explorer_url": f"https://etherscan.io/tx/{result['tx_hash']}" if chain == "eth" else None,
+                "explorer_url": f"https://etherscan.io/tx/{result['tx_hash']}"
+                if chain == "eth"
+                else None,
             }
         else:
             return {
@@ -867,6 +925,7 @@ def validate_address(chain: str, address: str) -> dict:
         address: Address to validate
     """
     from wallet_engine.chains import validate_address as va, CHAINS
+
     chain_info = CHAINS.get(chain.lower())
     if not chain_info:
         return {"error": f"Unsupported chain: {chain}"}
@@ -883,14 +942,20 @@ def validate_address(chain: str, address: str) -> dict:
 def chains_list() -> dict:
     """List all 55 supported blockchains with metadata."""
     from wallet_engine.chains import CHAINS
+
     families = set()
     chain_list = []
     for k, c in sorted(CHAINS.items()):
         families.add(c.family.value)
-        chain_list.append({
-            "key": k, "name": c.name, "symbol": c.symbol,
-            "family": c.family.value, "curve": c.curve,
-        })
+        chain_list.append(
+            {
+                "key": k,
+                "name": c.name,
+                "symbol": c.symbol,
+                "family": c.family.value,
+                "curve": c.curve,
+            }
+        )
     return {
         "total_chains": len(chain_list),
         "total_families": len(families),
@@ -917,6 +982,7 @@ def agent_plan(prompt: str, context: str = "") -> dict:
         context: Optional context (e.g. current vault state summary)
     """
     from agent.orchestrator import plan_operation
+
     return plan_operation(prompt, context)
 
 
@@ -929,6 +995,7 @@ def agent_execute(plan: list[dict] | str, confirm: bool = False) -> dict:
         confirm: If True, requires human confirmation before executing
     """
     from agent.orchestrator import execute_plan
+
     return execute_plan(plan, confirm=confirm)
 
 
@@ -936,8 +1003,9 @@ def agent_execute(plan: list[dict] | str, confirm: bool = False) -> dict:
 
 
 @mcp.tool()
-def schedule_dca(chain: str, amount: float, frequency: str = "weekly",
-                 to_address: str = "", label: str = "") -> dict:
+def schedule_dca(
+    chain: str, amount: float, frequency: str = "weekly", to_address: str = "", label: str = ""
+) -> dict:
     """Set up a DCA (dollar-cost averaging) schedule.
 
     Generates a wallet and periodically sends funds to it.
@@ -949,11 +1017,15 @@ def schedule_dca(chain: str, amount: float, frequency: str = "weekly",
         to_address: Optional destination (empty = generate new wallet each time)
         label: Optional label for generated wallets
     """
-    hitl = _write_with_hitl("schedule_dca", {"chain": chain, "amount": amount, "frequency": frequency},
-                            f"Set up {frequency} DCA of {amount} {chain}")
+    hitl = _write_with_hitl(
+        "schedule_dca",
+        {"chain": chain, "amount": amount, "frequency": frequency},
+        f"Set up {frequency} DCA of {amount} {chain}",
+    )
     if hitl:
         return hitl
     from agent.scheduler import add_dca_task
+
     return add_dca_task(chain, amount, frequency, to_address, label)
 
 
@@ -961,6 +1033,7 @@ def schedule_dca(chain: str, amount: float, frequency: str = "weekly",
 def schedule_list() -> list[dict]:
     """List all active scheduled tasks (DCA, sweeps, monitors)."""
     from agent.scheduler import scheduler
+
     return scheduler.list_tasks()
 
 
@@ -971,11 +1044,13 @@ def schedule_remove(task_id: str) -> dict:
     Args:
         task_id: ID from schedule_list
     """
-    hitl = _write_with_hitl("schedule_remove", {"task_id": task_id},
-                            f"Remove scheduled task {task_id}")
+    hitl = _write_with_hitl(
+        "schedule_remove", {"task_id": task_id}, f"Remove scheduled task {task_id}"
+    )
     if hitl:
         return hitl
     from agent.scheduler import scheduler
+
     if scheduler.remove_task(task_id):
         return {"removed": True, "task_id": task_id}
     return {"error": f"Task {task_id} not found"}
@@ -996,6 +1071,7 @@ async def anomaly_scan(address: str, chain: str = "eth") -> dict:
         chain: Chain key
     """
     from agent.detector import scan_wallet
+
     return await scan_wallet(address, chain)
 
 
@@ -1011,6 +1087,7 @@ def anomaly_monitor(wallet_id: str, webhook_url: str = "") -> dict:
         webhook_url: Optional webhook for alerts
     """
     from agent.scheduler import add_monitor_task
+
     return add_monitor_task(wallet_id, webhook_url)
 
 
@@ -1021,6 +1098,7 @@ def anomaly_monitor(wallet_id: str, webhook_url: str = "") -> dict:
 def proof_attestations() -> dict:
     """Get Proof of Generation statistics — total attestations, committed, uncommitted roots."""
     from core.proof import get_proof
+
     return get_proof().stats()
 
 
@@ -1033,6 +1111,7 @@ def proof_commit_pending(chain: str = "local") -> dict:
                'ethereum' (on-chain, ~$5-50 gas)
     """
     from core.proof import get_proof
+
     proof = get_proof()
     root_hash, count = proof.compute_merkle_root()
     if not root_hash:
@@ -1057,6 +1136,7 @@ def proof_verify_wallet(wallet_id: str) -> dict:
     """
     from core.proof import get_proof
     from core.vault import get_vault
+
     vault = get_vault()
     wallet = vault.get(wallet_id)
     if not wallet:
@@ -1077,6 +1157,7 @@ def proof_provenance(wallet_id: str) -> dict:
     """
     from core.proof import get_proof
     from core.vault import get_vault
+
     vault = get_vault()
     wallet = vault.get(wallet_id)
     if not wallet:
@@ -1093,6 +1174,7 @@ def proof_roots(limit: int = 10) -> dict:
         limit: Max roots to return (default 10)
     """
     from core.proof import get_proof
+
     proof = get_proof()
     return {
         "stats": proof.stats(),
@@ -1110,9 +1192,10 @@ def verify_order(order_id: str) -> dict:
     Args:
         order_id: Order ID from the generate response (e.g. 'x402_abc123...')
     """
-    from core.db_pool import DbPool
+    from core.wallet_db_pool import DbPool
     from core.config import cfg
     from core.proof import get_receipt_public_key
+
     pool = DbPool(cfg.data_dir / "marketplace.db")
     row = pool.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
     if not row:
@@ -1125,7 +1208,9 @@ def verify_order(order_id: str) -> dict:
         "amount_usd": row["amount_usd"],
         "created_at": row["created_at"],
         "status": row["status"],
-        "payment_method": "onchain" if row.get("payment_tx") and row["payment_tx"] != "free" else "free",
+        "payment_method": "onchain"
+        if row.get("payment_tx") and row["payment_tx"] != "free"
+        else "free",
         "receipt_public_key": pubkey,
         "verification": {
             "keys_stored": False,
@@ -1143,6 +1228,7 @@ def marketplace_transparency() -> dict:
     Proves WalletPress is operating transparently. No secrets here.
     """
     from core.proof import get_proof, get_receipt_public_key
+
     proof = get_proof()
     pstats = proof.stats()
     roots = proof.get_roots(20)

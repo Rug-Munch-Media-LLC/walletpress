@@ -10,10 +10,8 @@ the vault password. The password is configurable and never logged.
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
-import secrets
 import sqlite3
 import threading
 import time

@@ -16,7 +16,6 @@ not just a key generator. Nobody in the self-hosted space offers this.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os

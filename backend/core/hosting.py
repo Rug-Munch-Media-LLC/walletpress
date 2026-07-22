@@ -92,6 +92,36 @@ PLANS = {
 }
 
 
+<<<<<<< Updated upstream
+=======
+def _check_legacy_hashes() -> None:
+    """Scan all users for legacy SHA-256 hashes on startup. Log WARNING for each."""
+    try:
+        from .config import cfg
+
+        db_path = cfg.data_dir / "hosting.db"
+        if not db_path.exists():
+            return
+        import sqlite3
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT id, email FROM users").fetchall()
+        conn.close()
+        legacy = [r for r in rows if r["email"] and "$" not in r.get("password_hash", "")]
+        if legacy:
+            logger.warning(
+                f"FOUND {len(legacy)} USER(S) WITH LEGACY SHA-256 HASHES — they will be forced to reset on next login"
+            )
+            for r in legacy:
+                logger.warning(f"  User {r['id']} ({r['email']}) has SHA-256 hash")
+        else:
+            logger.info("All user password hashes are Argon2id — no migration needed")
+    except Exception as e:
+        logger.warning(f"Legacy hash check failed: {e}")
+
+
+>>>>>>> Stashed changes
 class HostingDB:
     """User and subscription management."""
 

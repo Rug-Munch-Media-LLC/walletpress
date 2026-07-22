@@ -56,7 +56,8 @@ _hitl_pool: Any = None
 def _get_hitl_db():
     global _hitl_pool
     if _hitl_pool is None:
-        from core.db_pool import DbPool
+        from core.wallet_db_pool import DbPool
+
         _hitl_pool = DbPool(cfg.data_dir / "agent_safety.db")
         _hitl_pool.executescript("""
             CREATE TABLE IF NOT EXISTS hitl_confirmations (
@@ -78,8 +79,8 @@ def _get_hitl_db():
 #  1. HITL — Human-in-the-Loop
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def request_confirmation(action: str, params: dict, reason: str = "",
-                         ttl: int = 900) -> dict:
+
+def request_confirmation(action: str, params: dict, reason: str = "", ttl: int = 900) -> dict:
     """Request human confirmation for a WRITE action.
 
     Persisted to SQLite — survives server restarts.
@@ -100,8 +101,16 @@ def request_confirmation(action: str, params: dict, reason: str = "",
         pool = _get_hitl_db()
         pool.execute(
             "INSERT INTO hitl_confirmations (id, action, params, reason, created_at, expires_at, status, confirmed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (entry["id"], entry["action"], entry["params"], entry["reason"],
-             entry["created_at"], entry["expires_at"], entry["status"], entry["confirmed_by"]),
+            (
+                entry["id"],
+                entry["action"],
+                entry["params"],
+                entry["reason"],
+                entry["created_at"],
+                entry["expires_at"],
+                entry["status"],
+                entry["confirmed_by"],
+            ),
         )
     logger.info(f"HITL: Confirmation requested {conf_id} for {action}")
     return {
@@ -125,7 +134,9 @@ def confirm_action(confirmation_id: str, confirmed_by: str = "human") -> dict:
         if row["status"] != "pending":
             return {"error": f"Confirmation already {row['status']}"}
         if row["expires_at"] < time.time():
-            pool.execute("UPDATE hitl_confirmations SET status = 'expired' WHERE id = ?", (confirmation_id,))
+            pool.execute(
+                "UPDATE hitl_confirmations SET status = 'expired' WHERE id = ?", (confirmation_id,)
+            )
             return {"error": "Confirmation expired"}
         pool.execute(
             "UPDATE hitl_confirmations SET status = 'approved', confirmed_by = ? WHERE id = ?",
@@ -145,7 +156,9 @@ def reject_action(confirmation_id: str, reason: str = "") -> dict:
         ).fetchone()
         if not row:
             return {"error": f"Confirmation {confirmation_id} not found"}
-        pool.execute("UPDATE hitl_confirmations SET status = 'rejected' WHERE id = ?", (confirmation_id,))
+        pool.execute(
+            "UPDATE hitl_confirmations SET status = 'rejected' WHERE id = ?", (confirmation_id,)
+        )
         logger.info(f"HITL: Rejected {confirmation_id}: {reason}")
         return {"rejected": True, "reason": reason, "confirmation_id": confirmation_id}
 
@@ -158,13 +171,16 @@ def list_pending() -> list[dict]:
         "SELECT * FROM hitl_confirmations WHERE status = 'pending' AND expires_at > ? ORDER BY created_at",
         (now,),
     ).fetchall()
-    return [{
-        "confirmation_id": r["id"],
-        "action": r["action"],
-        "reason": r["reason"],
-        "expires_in": int(r["expires_at"] - now),
-        "created_at": r["created_at"],
-    } for r in rows]
+    return [
+        {
+            "confirmation_id": r["id"],
+            "action": r["action"],
+            "reason": r["reason"],
+            "expires_in": int(r["expires_at"] - now),
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -172,14 +188,21 @@ def list_pending() -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 WRITE_ACTIONS = {
-    "wallet_generate", "wallet_from_mnemonic", "vault_delete",
-    "wallet_rotate", "wallet_sweep", "schedule_dca", "schedule_remove",
-    "anomaly_monitor", "proof_commit_pending",
+    "wallet_generate",
+    "wallet_from_mnemonic",
+    "vault_delete",
+    "wallet_rotate",
+    "wallet_sweep",
+    "schedule_dca",
+    "schedule_remove",
+    "anomaly_monitor",
+    "proof_commit_pending",
     "key_export",  # Private key export — HITL required
 }
 
 PLAN_ACTIONS = {
-    "agent_plan", "agent_execute",
+    "agent_plan",
+    "agent_execute",
 }
 
 
@@ -211,11 +234,17 @@ def check_action_allowed(action: str) -> tuple[bool, str]:
         return True, ""
     if tier == "plan":
         if is_write:
-            return False, f"WRITE action '{action}' not allowed on tier 'plan'. Upgrade to 'exec' or use HITL flow."
+            return (
+                False,
+                f"WRITE action '{action}' not allowed on tier 'plan'. Upgrade to 'exec' or use HITL flow.",
+            )
         return True, ""  # read + plan allowed
     if tier == "read":
         if is_write or is_plan:
-            return False, f"Action '{action}' not allowed on tier 'read'. Upgrade to 'plan' or 'exec'."
+            return (
+                False,
+                f"Action '{action}' not allowed on tier 'read'. Upgrade to 'plan' or 'exec'.",
+            )
         return True, ""  # read only
     return False, f"Unknown tier '{tier}'. Set WP_AGENT_TIER to read, plan, or exec."
 
@@ -241,10 +270,14 @@ def is_killed() -> bool:
 def kill_agent(reason: str = "") -> dict:
     """Emergency stop the agent. Returns a resurrection key."""
     KILL_FILE.parent.mkdir(parents=True, exist_ok=True)
-    KILL_FILE.write_text(json.dumps({
-        "killed_at": time.time(),
-        "reason": reason or "no reason given",
-    }))
+    KILL_FILE.write_text(
+        json.dumps(
+            {
+                "killed_at": time.time(),
+                "reason": reason or "no reason given",
+            }
+        )
+    )
     # Generate resurrection key
     key = f"resurrect_{secrets.token_hex(16)}"
     KILL_KEY_FILE.write_text(key)
@@ -314,13 +347,16 @@ def _period_start(period: str) -> float:
     monthly: start of current UTC month
     """
     from datetime import datetime, timezone, timedelta
+
     now = datetime.now(timezone.utc)
     if period == "daily":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "weekly":
         # Monday of current week
         days_since_monday = now.weekday()
-        start = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = (now - timedelta(days=days_since_monday)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
     elif period == "monthly":
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
@@ -415,6 +451,7 @@ def list_limits() -> dict:
 #  4. Address Book (Allowlist + Blocklist + Scam DB)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _get_addr_db() -> sqlite3.Connection:
     SAFETY_DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(SAFETY_DB))
@@ -472,7 +509,9 @@ def address_book_list(list_type: str = "") -> list[dict]:
             (list_type,),
         ).fetchall()
     else:
-        rows = conn.execute("SELECT * FROM address_book ORDER BY list_type, added_at DESC").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM address_book ORDER BY list_type, added_at DESC"
+        ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -480,8 +519,9 @@ def address_book_list(list_type: str = "") -> list[dict]:
 def address_book_remove(address: str, chain: str) -> dict:
     """Remove an address from the address book."""
     conn = _get_addr_db()
-    conn.execute("DELETE FROM address_book WHERE address = ? AND chain = ?",
-                 (address.lower(), chain.lower()))
+    conn.execute(
+        "DELETE FROM address_book WHERE address = ? AND chain = ?", (address.lower(), chain.lower())
+    )
     conn.commit()
     removed = conn.total_changes > 0
     conn.close()
@@ -507,13 +547,21 @@ def check_address(address: str, chain: str) -> dict:
     ).fetchone()
     if blocked:
         conn.close()
-        return {"allowed": False, "reason": f"Address is on blocklist: {blocked['label']}", "lists": ["blocklist"]}
+        return {
+            "allowed": False,
+            "reason": f"Address is on blocklist: {blocked['label']}",
+            "lists": ["blocklist"],
+        }
 
     # Check against bundled scam DB (if loaded)
     scam_check = _check_scam_db(addr_lower, chain_lower)
     if scam_check:
         conn.close()
-        return {"allowed": False, "reason": f"Address is a known scam address: {scam_check}", "lists": ["scam_db"]}
+        return {
+            "allowed": False,
+            "reason": f"Address is a known scam address: {scam_check}",
+            "lists": ["scam_db"],
+        }
 
     # Check allowlist (if configured to require allowlist)
     require_allowlist = os.getenv("WP_AGENT_REQUIRE_ALLOWLIST", "0") == "1"
@@ -524,7 +572,11 @@ def check_address(address: str, chain: str) -> dict:
         ).fetchone()
         conn.close()
         if not allowed:
-            return {"allowed": False, "reason": "Address not in allowlist (WP_AGENT_REQUIRE_ALLOWLIST=1)", "lists": []}
+            return {
+                "allowed": False,
+                "reason": "Address not in allowlist (WP_AGENT_REQUIRE_ALLOWLIST=1)",
+                "lists": [],
+            }
     conn.close()
     return {"allowed": True, "reason": "Address is safe", "lists": []}
 
@@ -567,6 +619,7 @@ def _check_scam_db(address: str, chain: str) -> str:
 #  7. Audit Trail — SHA-256 chained
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _get_audit_db() -> sqlite3.Connection:
     SAFETY_DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(SAFETY_DB))
@@ -599,8 +652,7 @@ def _get_last_audit_hash(conn: sqlite3.Connection) -> str:
     return row[0] if row else "0" * 64
 
 
-def audit_log(action: str, params: dict, result: Any,
-              confirmed_by: str = "", chain: str = "local"):
+def audit_log(action: str, params: dict, result: Any, confirmed_by: str = "", chain: str = "local"):
     """Append an entry to the audit trail. SHA-256 chained to previous entry.
 
     The chain is: prev_hash = sha256(prev_entry), current_hash = sha256(prev_hash + current_data).
@@ -622,7 +674,18 @@ def audit_log(action: str, params: dict, result: Any,
         """INSERT INTO agent_audit
         (id, timestamp, agent_tier, action, params, result, confirmed_by, hash, prev_hash, chain)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (entry_id, now, tier, action, params_json, result_json, confirmed_by, current_hash, prev_hash, chain),
+        (
+            entry_id,
+            now,
+            tier,
+            action,
+            params_json,
+            result_json,
+            confirmed_by,
+            current_hash,
+            prev_hash,
+            chain,
+        ),
     )
     conn.commit()
     conn.close()
@@ -640,8 +703,12 @@ def audit_trail(limit: int = 50) -> list[dict]:
     result = []
     for r in rows:
         entry = dict(r)
-        entry["params"] = json.loads(entry["params"]) if isinstance(entry["params"], str) else entry["params"]
-        entry["result"] = json.loads(entry["result"]) if isinstance(entry["result"], str) else entry["result"]
+        entry["params"] = (
+            json.loads(entry["params"]) if isinstance(entry["params"], str) else entry["params"]
+        )
+        entry["result"] = (
+            json.loads(entry["result"]) if isinstance(entry["result"], str) else entry["result"]
+        )
         result.append(entry)
     return result
 
@@ -659,13 +726,16 @@ def verify_audit_chain() -> dict:
     prev_hash = "0" * 64
     for r in rows:
         expected_hash = hashlib.sha256(
-            (prev_hash + r["id"] + str(r["timestamp"]) + r["action"] +
-             r["params"] + r["result"]).encode()
+            (
+                prev_hash + r["id"] + str(r["timestamp"]) + r["action"] + r["params"] + r["result"]
+            ).encode()
         ).hexdigest()
         if r["hash"] != expected_hash:
             issues.append(f"Hash mismatch at {r['id']}")
         if r["prev_hash"] != prev_hash:
-            issues.append(f"Chain broken at {r['id']}: expected prev_hash={prev_hash}, got {r['prev_hash']}")
+            issues.append(
+                f"Chain broken at {r['id']}: expected prev_hash={prev_hash}, got {r['prev_hash']}"
+            )
         prev_hash = r["hash"]
     if issues:
         return {"valid": False, "issues": issues, "entries_checked": len(rows)}
@@ -676,8 +746,10 @@ def verify_audit_chain() -> dict:
 #  2. Transaction Simulation (lightweight)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def simulate_transaction(chain: str, from_address: str, to_address: str,
-                                  amount: float) -> dict:
+
+async def simulate_transaction(
+    chain: str, from_address: str, to_address: str, amount: float
+) -> dict:
     """Simulate a transaction without broadcasting (async — P2-6 fix).
 
     For EVM chains: uses eth_estimateGas + eth_gasPrice to project total cost.
@@ -696,23 +768,39 @@ async def simulate_transaction(chain: str, from_address: str, to_address: str,
         rpc_url = EVM_RPC[chain]
         try:
             async with httpx.AsyncClient(timeout=8) as c:
-                gas_est = await c.post(rpc_url, json={
-                    "jsonrpc": "2.0",
-                    "method": "eth_estimateGas",
-                    "params": [{"from": from_address, "to": to_address, "value": hex(int(amount * 1e18))}],
-                    "id": 1,
-                })
+                gas_est = await c.post(
+                    rpc_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "eth_estimateGas",
+                        "params": [
+                            {
+                                "from": from_address,
+                                "to": to_address,
+                                "value": hex(int(amount * 1e18)),
+                            }
+                        ],
+                        "id": 1,
+                    },
+                )
                 gas_data = gas_est.json()
                 gas = int(gas_data.get("result", "0x5208"), 16) if "result" in gas_data else 21000
 
-                price = await c.post(rpc_url, json={
-                    "jsonrpc": "2.0",
-                    "method": "eth_gasPrice",
-                    "params": [],
-                    "id": 1,
-                })
+                price = await c.post(
+                    rpc_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "eth_gasPrice",
+                        "params": [],
+                        "id": 1,
+                    },
+                )
                 price_data = price.json()
-                gas_price = int(price_data.get("result", "0x3b9aca00"), 16) if "result" in price_data else int(1e9)
+                gas_price = (
+                    int(price_data.get("result", "0x3b9aca00"), 16)
+                    if "result" in price_data
+                    else int(1e9)
+                )
 
                 gas_cost_eth = (gas * gas_price) / 1e18
                 return {

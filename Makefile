@@ -1,3 +1,5 @@
+include ../fleet-infra/templates/Makefile.shared
+
 SHELL := /bin/bash
 
 .PHONY: help install dev lint format test typecheck security audit clean \

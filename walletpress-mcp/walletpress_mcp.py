@@ -25,7 +25,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -78,11 +77,10 @@ def _call_backend(method: str, path: str, data: dict | None = None) -> dict:
 
 def _local_call(method: str, path: str, data: dict | None = None) -> dict:
     """Handle a local call by routing to the appropriate module."""
-    from core.vault import get_vault, WalletEntry
+    from core.vault import get_vault
     from wallet_engine.chains import CHAINS
     from wallet_engine.generator import get_generator as get_gen
     from core.config import cfg
-    import time, secrets
 
     vault = get_vault()
     gen = get_gen(cfg.vault_password)

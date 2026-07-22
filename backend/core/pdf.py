@@ -7,7 +7,6 @@ import logging
 import time
 from typing import Optional
 
-import qrcode
 
 from core.config import cfg
 

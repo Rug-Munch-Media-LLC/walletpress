@@ -26,3 +26,20 @@ jobs:
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz | tar xz -C /usr/local/bin
           gitleaks detect --source . --verbose
+
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python and bandit
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-pip
+          pip3 install bandit
+      - name: Bandit SAST scan
+        run: bandit -r . -x tests/,__pycache__,.venv -ll -f json -o bandit-report.json
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+        if: always()

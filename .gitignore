@@ -1,73 +1,92 @@
-# ═══════════════════════════════════════════════════════════
-# WalletPress — .gitignore (RMI universal + WP-specific)
-# ═══════════════════════════════════════════════════════════
+# === RUGMUNCH STANDARD GITIGNORE — 2026-07-22 ===
 
-# ── SECRETS (zero tolerance) ────────────────────────────────
-.env
-.env.*
-!.env.example
-!.env.template
-*.pem
+# Secrets & Credentials — NEVER commit
+*.env
 *.key
+*.pem
 *.p12
 *.pfx
-id_rsa
-id_ed25519
-*.session
-credentials.json
-service-account.json
-wallet.json
-vault.json
-.secrets/
-.rmi/wallets/
+credentials*
+secrets*
+.env.*
+!.env.example
+!.env.sample
 
-# ── Python ──────────────────────────────────────────────────
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*.egg-info/
 .venv/
 venv/
-*.egg-info/
-dist/
-build/
+*.egg
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
-htmlcov/
-.coverage
-backend/.mypy_cache/
-backend/.ruff_cache/
-backend/.pytest_cache/
-backend/__pycache__/
-backend/venv/
 
-# ── Node (WordPress plugin) ────────────────────────────────
+# Node
 node_modules/
 .npm/
-wp-plugin/node_modules/
+.yarn/
 
-# ── Docker ──────────────────────────────────────────────────
-docker-compose.override.yml
+# Build
+dist/
+build/
+*.pyc
 
-# ── Data (too large for git, use HF S3) ─────────────────────
-data/
-*.dump
-*.rdb
-*.tar.gz
+# OS
+.DS_Store
+Thumbs.db
 
-# ── IDE ─────────────────────────────────────────────────────
-.vscode/
+# IDE
 .idea/
+.vscode/
 *.swp
 *.swo
-*~
-.DS_Store
 
-# ── Logs ────────────────────────────────────────────────────
+# Logs
 *.log
-logs/
 
-# ── Cache ───────────────────────────────────────────────────
-.cache/
-tmp/
+# Security reports — stored in R2, not git
+security-reports/
+*.gitleaks.json
+trivy*.json
+
+# Internal docs — company confidential
+*INTERNAL*
+PRIVATE*
+ADMIN-ACCESS*
+EDGE*
+secret-rotation*
+
+# === REPO-SPECIFIC ENTRIES (preserved) ===
+
+!.env.template
+*.dump
+*.pyo
+*.rdb
+*.session
+*.tar.gz
 *.tmp
+*~
+.cache/
+.coverage
+.env
+.rmi/wallets/
+.secrets/
+backend/.mypy_cache/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/__pycache__/
+backend/venv/
+credentials.json
+data/
+docker-compose.override.yml
+htmlcov/
+id_ed25519
+id_rsa
+logs/
+service-account.json
+tmp/
+vault.json
+wallet.json
+wp-plugin/node_modules/

@@ -192,6 +192,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# ── Structured JSON logging (structlog) ─────────────────────────
+from core.structured_logging import setup_logging as _setup_logging
+_setup_logging(os.getenv("WP_LOG_LEVEL", "INFO"))
+
 app.add_middleware(RequestIDMiddleware)
 
 app.add_middleware(

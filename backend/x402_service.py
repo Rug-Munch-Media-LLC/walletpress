@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from datetime import UTC, datetime
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -40,6 +41,53 @@ app = FastAPI(
 )
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# ── RFC 7807 Error Handlers ─────────────────────────────────────────
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(StarletteHTTPException)
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """RFC 7807 Problem Details for HTTP errors."""
+    rid = getattr(request.state, "request_id", "-")
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    status = exc.status_code
+    titles = {400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+              404: "Not Found", 409: "Conflict", 422: "Unprocessable Entity",
+              429: "Too Many Requests", 500: "Internal Server Error",
+              502: "Bad Gateway", 503: "Service Unavailable"}
+    return JSONResponse(
+        status_code=status,
+        content={
+            "type": "/errors/not_found" if status == 404 else "about:blank",
+            "title": titles.get(status, "Error"),
+            "status": status,
+            "detail": detail,
+            "request_id": rid,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler for unhandled exceptions."""
+    if isinstance(exc, (HTTPException, StarletteHTTPException)):
+        return await http_exception_handler(request, exc)
+    rid = getattr(request.state, "request_id", "-")
+    logger.exception("unhandled_exception request_id=%s path=%s", rid, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "type": "about:blank",
+            "title": "Internal Server Error",
+            "status": 500,
+            "detail": "Internal server error",
+            "request_id": rid,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+
 
 # ── Pricing ──────────────────────────────────────────────────────
 

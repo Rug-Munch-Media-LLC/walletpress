@@ -4,6 +4,9 @@ import tempfile
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+# Import keccak early so it can be patched
+from Crypto.Hash import keccak as _keccak_import  # noqa: F401
 from Crypto.Hash import keccak  # noqa: F401  # ensure keccak is loadable for patch
 
 os.environ["WP_VAULT_PASSWORD"] = "test-vault-password"
@@ -66,7 +69,10 @@ def test_request_recovery_with_sufficient_guardians():
     sw.setup_recovery("wallet_r3", guardians, threshold=2)
     sigs = [_sig("0xAAA"), _sig("0xBBB")]
 
-    with patch.object(sw, "_verify_signature", return_value=True):
+    with (
+        patch.object(sw, "_verify_signature", return_value=True),
+        patch.object(sw, "_verify_claimant_signature", return_value=True),
+    ):
         with patch.object(
             sw, "_execute_recovery",
             return_value={"success": True, "new_address": "0xNEW"},
@@ -103,7 +109,10 @@ def test_recovery_with_invalid_claimant_signature():
     sw.setup_recovery("wallet_r5", guardians, threshold=2)
     sigs = [_sig("0xAAA"), _sig("0xBBB")]
 
-    with patch.object(sw, "_verify_signature") as mock_v:
+    with (
+        patch.object(sw, "_verify_signature") as mock_v,
+        patch.object(sw, "_verify_claimant_signature", return_value=False),
+    ):
         mock_v.side_effect = lambda addr, msg, sig, chain: (
             addr.lower() in [g.lower() for g in guardians]
         )
@@ -201,10 +210,10 @@ def test_verify_signature_valid():
     address = "0x" + "ab" * 20
     sig = "0x" + "ff" * 64 + "1b"
 
-    with patch("eth_account.messages.defunct_hash_message", return_value=b"\x00" * 32), \
-         patch("coincurve.PublicKey") as MockPK, \
-         patch("Crypto.Hash.keccak") as MockKeccak:
-
+    with (
+        patch("coincurve.PublicKey") as MockPK,
+        patch("Crypto.Hash.keccak") as MockKeccak,
+    ):
         mock_pub = MagicMock()
         mock_pub.format.return_value = bytes.fromhex("04" + "00" * 32 + "ab" * 20)
         MockPK.from_signature_and_message.return_value = mock_pub
@@ -221,10 +230,10 @@ def test_verify_signature_invalid():
     address = "0x" + "ab" * 20
     sig = "0x" + "ff" * 64 + "1c"
 
-    with patch("eth_account.messages.defunct_hash_message", return_value=b"\x00" * 32), \
-         patch("coincurve.PublicKey") as MockPK, \
-         patch("Crypto.Hash.keccak") as MockKeccak:
-
+    with (
+        patch("coincurve.PublicKey") as MockPK,
+        patch("Crypto.Hash.keccak") as MockKeccak,
+    ):
         mock_pub = MagicMock()
         mock_pub.format.return_value = bytes.fromhex("04" + "00" * 32 + "cd" * 20)
         MockPK.from_signature_and_message.return_value = mock_pub

@@ -29,6 +29,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from datetime import UTC, datetime
 
 from core.audit import get_audit
 from core.auth import get_key_store
@@ -238,8 +239,18 @@ async def require_auth_on_mutations(request: Request, call_next):
         if not auth:
             auth = request.headers.get("X-API-Key", "")
         if not auth:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(status_code=401, content={"error": "API key required. Provide via X-API-Key or Authorization: Bearer header."})
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "type": "/errors/unauthorized",
+                    "title": "Unauthorized",
+                    "status": 401,
+                    "detail": "API key required. Provide via X-API-Key or Authorization: Bearer header.",
+                    "request_id": getattr(request.state, "request_id", ""),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "code": "unauthorized",
+                },
+            )
 
         api_key_obj = None
         if auth == cfg.admin_key:
@@ -254,18 +265,33 @@ async def require_auth_on_mutations(request: Request, call_next):
             ks = get_key_store()
             api_key_obj = ks.verify(auth)
             if not api_key_obj:
-                from fastapi.responses import JSONResponse
-                return JSONResponse(status_code=403, content={"error": "Invalid or revoked API key"})
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "type": "/errors/forbidden",
+                        "title": "Forbidden",
+                        "status": 403,
+                        "detail": "Invalid or revoked API key",
+                        "request_id": getattr(request.state, "request_id", ""),
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "code": "forbidden",
+                    },
+                )
 
         # For write requests: viewer is not enough
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             from core.auth import role_has_at_least
             if not role_has_at_least(api_key_obj.role, "operator"):
-                from fastapi.responses import JSONResponse
                 return JSONResponse(
                     status_code=403,
                     content={
-                        "error": f"Insufficient role: '{api_key_obj.role}' cannot perform write operations. Required: operator or admin."
+                        "type": "/errors/forbidden",
+                        "title": "Forbidden",
+                        "status": 403,
+                        "detail": f"Insufficient role: '{api_key_obj.role}' cannot perform write operations. Required: operator or admin.",
+                        "request_id": getattr(request.state, "request_id", ""),
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "code": "forbidden",
                     },
                 )
 
@@ -299,9 +325,18 @@ def _request_id(request: Request) -> str:
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     rid = _request_id(request)
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    status = exc.status_code
     return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.detail if isinstance(exc.detail, str) else exc.detail, "request_id": rid},
+        status_code=status,
+        content={
+            "type": "about:blank",
+            "title": {400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 422: "Unprocessable Entity", 429: "Too Many Requests", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}.get(status, "Error"),
+            "status": status,
+            "detail": detail,
+            "request_id": rid,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
     )
 
 
@@ -312,7 +347,17 @@ async def global_exception_handler(request: Request, exc: Exception):
         return await http_exception_handler(request, exc)
     logger.error("unhandled_exception method=%s path=%s exc=%s request_id=%s",
                  request.method, request.url.path, f"{type(exc).__name__}: {exc}", rid)
-    return JSONResponse(status_code=500, content={"error": "Internal server error", "request_id": rid})
+    return JSONResponse(
+        status_code=500,
+        content={
+            "type": "about:blank",
+            "title": "Internal Server Error",
+            "status": 500,
+            "detail": "Internal server error",
+            "request_id": rid,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
 
 
 app.include_router(chain_vault.router)
@@ -439,7 +484,6 @@ async def health():
     if status == "degraded":
         status_code = 503
 
-    from fastapi.responses import JSONResponse
     return JSONResponse(
         status_code=status_code,
         content={
@@ -449,6 +493,19 @@ async def health():
             "checks": checks,
         },
     )
+
+
+
+@app.get("/version", summary="Version", description="Service version endpoint.")
+async def version():
+    from core.config import cfg
+    return {
+        "version": cfg.version,
+        "service": "WalletPress API",
+        "title": cfg.title,
+        "description": cfg.description,
+        "status": "operational",
+    }
 
 
 @app.get("/", summary="Root", description="API root endpoint. Returns service metadata, version, docs links, and trust/security information.")

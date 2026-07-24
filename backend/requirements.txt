@@ -30,3 +30,4 @@ pycardano>=0.19.0   # Cardano Kholaw (BIP32-Ed25519 IOHK) — 1.1 MB disk
 
 python-multipart>=0.0.9
 mcp>=1.25.0
+python-jose[cryptography]>=3.3.0

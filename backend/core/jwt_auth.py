@@ -21,7 +21,7 @@ import time
 import urllib.request
 from typing import Any
 
-from fastapi import HTTPException, Request, Response
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -179,9 +179,18 @@ class JWTValidationMiddleware(BaseHTTPMiddleware):
         # Let existing middleware handle it for API keys,
         # but return 401 for malformed JWTs
         if auth.startswith("Bearer ") and not auth[7:].startswith("wp_"):
+            from datetime import UTC, datetime
             return JSONResponse(
                 status_code=401,
-                content={"error": "Invalid or expired JWT token"},
+                content={
+                    "type": "/errors/unauthorized",
+                    "title": "Unauthorized",
+                    "status": 401,
+                    "detail": "Invalid or expired JWT token",
+                    "request_id": getattr(request.state, "request_id", ""),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "code": "unauthorized",
+                },
             )
 
         return await call_next(request)

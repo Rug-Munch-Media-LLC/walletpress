@@ -21,7 +21,6 @@ import secrets
 import sqlite3
 import time
 from pathlib import Path
-from typing import Optional
 
 from argon2 import PasswordHasher
 from argon2.exceptions import (
@@ -288,7 +287,7 @@ class HostingDB:
             return False
         return bool(row["email_verified"])
 
-    def login(self, email: str, password: str) -> Optional[dict]:
+    def login(self, email: str, password: str) -> dict | None:
         """Verify login and migrate legacy SHA-256 hash to Argon2id on success.
 
         Returns the user row (without password_hash) on success, None on failure.
@@ -323,7 +322,7 @@ class HostingDB:
         conn.close()
         return safe
 
-    def get_by_api_key(self, api_key: str) -> Optional[dict]:
+    def get_by_api_key(self, api_key: str) -> dict | None:
         conn = self._conn()
         row = conn.execute("SELECT * FROM users WHERE api_key = ?", (api_key,)).fetchone()
         conn.close()
@@ -365,7 +364,7 @@ class HostingDB:
             )
         return True, ""
 
-    def get_user(self, user_id: str) -> Optional[dict]:
+    def get_user(self, user_id: str) -> dict | None:
         conn = self._conn()
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         conn.close()
@@ -373,7 +372,7 @@ class HostingDB:
 
 
 # Singleton
-_hosting: Optional[HostingDB] = None
+_hosting: HostingDB | None = None
 
 
 def get_hosting() -> HostingDB:

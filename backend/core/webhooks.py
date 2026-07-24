@@ -21,7 +21,6 @@ import logging
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import ipaddress
 from urllib.parse import urlparse
@@ -113,7 +112,7 @@ class WebhookDeliverer:
 
     def __init__(self):
         self._targets: dict[str, WebhookTarget] = {}
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
         self._running = False
         self._queue: asyncio.Queue = asyncio.Queue()
 
@@ -217,7 +216,7 @@ class WebhookDeliverer:
                 logger.error(f"Webhook worker error: {e}")
 
 
-_webhook_deliverer: Optional[WebhookDeliverer] = None
+_webhook_deliverer: WebhookDeliverer | None = None
 
 
 def get_webhook_deliverer() -> WebhookDeliverer:

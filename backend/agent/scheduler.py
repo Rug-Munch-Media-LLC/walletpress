@@ -16,7 +16,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("wp.agent.scheduler")
 
@@ -48,7 +48,7 @@ class AgentScheduler:
         self._tasks: dict[str, ScheduledTask] = {}
         self._lock = threading.Lock()
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._load()
 
     def _path(self) -> Path:

@@ -25,7 +25,6 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from core.config import cfg
 
@@ -87,7 +86,7 @@ class SmartWalletManager:
     All data stored in SQLite at cfg.data_dir / smart_wallet.db.
     """
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         self._db_path = db_path or cfg.data_dir / "smart_wallet.db"
         self._lock = threading.Lock()
         self._init_db()
@@ -182,7 +181,7 @@ class SmartWalletManager:
         logger.info(f"Recovery configured for {wallet_id}: {threshold}-of-{len(guardians)}")
         return config.to_dict()
 
-    def get_recovery_config(self, wallet_id: str) -> Optional[dict]:
+    def get_recovery_config(self, wallet_id: str) -> dict | None:
         """Get the recovery configuration for a wallet."""
         conn = self._conn()
         row = conn.execute(
@@ -744,7 +743,7 @@ class SmartWalletManager:
         }
 
 
-_sw: Optional[SmartWalletManager] = None
+_sw: SmartWalletManager | None = None
 
 
 def get_smart_wallet() -> SmartWalletManager:

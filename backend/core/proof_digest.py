@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Optional
 
 from .proof import PROOF_VERSION, get_proof
 
@@ -70,7 +69,7 @@ def verify_wallet(wallet_id: str, address: str, public_key_hex: str = "") -> dic
     return proof.verify(wallet_id, address, public_key_hex)
 
 
-def generate_verification_page(root_hash: str, output_path: Optional[Path] = None) -> str:
+def generate_verification_page(root_hash: str, output_path: Path | None = None) -> str:
     """Generate an HTML verification page for a Merkle root.
 
     This page can be statically hosted or published as proof.

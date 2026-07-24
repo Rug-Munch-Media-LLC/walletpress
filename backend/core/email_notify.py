@@ -21,7 +21,6 @@ import ssl
 from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
 
 logger = logging.getLogger("wp.email")
 
@@ -179,7 +178,7 @@ class EmailNotifier:
             server.sendmail(FROM_EMAIL, [TO_EMAIL], msg.as_string())
 
 
-_notifier: Optional[EmailNotifier] = None
+_notifier: EmailNotifier | None = None
 
 
 def get_notifier() -> EmailNotifier:

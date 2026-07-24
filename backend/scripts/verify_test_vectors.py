@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """WalletPress Address Verification — BIP39/BIP32/BIP44 Compatibility Suite.
 
 This is the trust foundation. Every address is verified against industry-

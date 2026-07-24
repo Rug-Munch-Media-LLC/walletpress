@@ -11,7 +11,6 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 from .config import cfg
 
@@ -22,7 +21,7 @@ class AuditLog:
     def __init__(self, path: Path):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._fd: Optional[int] = None
+        self._fd: int | None = None
         self._ensure_log_exists()
 
     def _ensure_log_exists(self):
@@ -91,7 +90,7 @@ class AuditLog:
         return {"total_entries": count, "file_size": self.path.stat().st_size}
 
 
-_audit: Optional[AuditLog] = None
+_audit: AuditLog | None = None
 
 
 def get_audit() -> AuditLog:

@@ -34,7 +34,6 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("wp.proof")
 
@@ -43,9 +42,9 @@ PROOF_VERSION = "walletpress-proof-v1"
 # Ed25519 signing key for cryptographic receipts.
 # Generated once on first startup, persisted to disk.
 # Used to sign order receipts so customers can verify authenticity.
-_RECEIPT_KEY: Optional[bytes] = None
-_RECEIPT_PUBKEY: Optional[bytes] = None
-_RECEIPT_KEY_PATH: Optional[Path] = None
+_RECEIPT_KEY: bytes | None = None
+_RECEIPT_PUBKEY: bytes | None = None
+_RECEIPT_KEY_PATH: Path | None = None
 
 
 def _ensure_receipt_key():
@@ -559,7 +558,7 @@ class ProofOfGeneration:
             logger.warning(f"Ethereum commitment failed: {e}")
             return "", 0
 
-    def get_attestation(self, wallet_id: str) -> Optional[dict]:
+    def get_attestation(self, wallet_id: str) -> dict | None:
         """Get the attestation for a specific wallet."""
         conn = self._conn()
         row = conn.execute(
@@ -567,7 +566,7 @@ class ProofOfGeneration:
         ).fetchone()
         return dict(row) if row else None
 
-    def get_attestation_by_leaf(self, leaf_hash: str) -> Optional[dict]:
+    def get_attestation_by_leaf(self, leaf_hash: str) -> dict | None:
         """Get attestation by leaf hash."""
         conn = self._conn()
         row = conn.execute(
@@ -690,10 +689,10 @@ class ProofOfGeneration:
         }
 
 
-_proof: Optional[ProofOfGeneration] = None
+_proof: ProofOfGeneration | None = None
 
 
-def get_proof(db_path: Optional[Path] = None) -> ProofOfGeneration:
+def get_proof(db_path: Path | None = None) -> ProofOfGeneration:
     global _proof
     if _proof is None:
         from .config import cfg

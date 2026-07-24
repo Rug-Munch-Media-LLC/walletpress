@@ -8,6 +8,7 @@ Trust: If your mnemonic produces different addresses here than in
 your wallet, STOP using this software and report it as a bug.
 """
 
+from __future__ import annotations
 from fastapi import APIRouter
 
 from wallet_engine.generator import WalletGenerator

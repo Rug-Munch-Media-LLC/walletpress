@@ -42,7 +42,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response
@@ -172,7 +172,7 @@ class _DB:
         conn.close()
 
 
-_db: Optional[_DB] = None
+_db: _DB | None = None
 
 
 def get_db() -> _DB:

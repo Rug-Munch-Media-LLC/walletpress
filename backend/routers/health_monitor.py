@@ -13,7 +13,6 @@ import json
 import logging
 import sqlite3
 import time
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -25,7 +24,7 @@ logger = logging.getLogger("wp.health")
 
 router = APIRouter(prefix="/api/v1/health", tags=["Health Monitor"])
 
-_monitor_db: Optional[sqlite3.Connection] = None
+_monitor_db: sqlite3.Connection | None = None
 
 
 def _get_db() -> sqlite3.Connection:

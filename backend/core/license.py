@@ -58,7 +58,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("wp.license")
 
@@ -121,7 +120,7 @@ class LicenseManager:
     No secrets, no obfuscation, no shenanigans.
     """
 
-    def __init__(self, key_path: Optional[Path] = None):
+    def __init__(self, key_path: Path | None = None):
         self.key_path = key_path or Path("/etc/walletpress/license.key")
         self._tier: str = self._detect_tier()
 
@@ -157,7 +156,7 @@ class LicenseManager:
         logger.info("No valid license found. Running in Community mode.")
         return "community"
 
-    def _verify_token(self, token: str) -> Optional[str]:
+    def _verify_token(self, token: str) -> str | None:
         """Verify a license token.
 
         Token format: base64(json({"tier":"pro","exp":1234567890,"sig":"..."}))
@@ -250,7 +249,7 @@ class LicenseManager:
 
 
 # Singleton
-_license: Optional[LicenseManager] = None
+_license: LicenseManager | None = None
 
 
 def get_license() -> LicenseManager:

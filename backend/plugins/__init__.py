@@ -1,4 +1,5 @@
 """WalletPress Protocol Plugins — extend agent with any blockchain protocol."""
+from __future__ import annotations
 from plugins.sdk import WalletPressPlugin, register_plugin, list_plugins, get_all_tools, execute_plugin_tool
 from plugins.sdk import _plugins as _plugin_registry
 

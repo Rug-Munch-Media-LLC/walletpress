@@ -14,6 +14,7 @@ Usage:
     alembic downgrade -1
 """
 
+from __future__ import annotations
 from logging.config import fileConfig
 from pathlib import Path
 

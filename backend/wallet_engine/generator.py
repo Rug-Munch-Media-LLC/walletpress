@@ -30,7 +30,7 @@ import logging
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from .chains import CHAINS, ChainFamily
 
@@ -862,7 +862,7 @@ class WalletGenerator:
         }
 
 
-_generator: Optional[WalletGenerator] = None
+_generator: WalletGenerator | None = None
 
 
 def get_generator(vault_password: str = "") -> WalletGenerator:

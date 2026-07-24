@@ -20,7 +20,6 @@ import struct
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from .config import cfg
 
@@ -160,7 +159,7 @@ class TOTPManager:
         return False
 
 
-_manager: Optional[TOTPManager] = None
+_manager: TOTPManager | None = None
 
 
 def get_totp_manager() -> TOTPManager:

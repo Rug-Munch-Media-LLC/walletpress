@@ -10,8 +10,10 @@ the vault password. The password is configurable and never logged.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import secrets
 import sqlite3
 import threading
 import time
@@ -19,7 +21,7 @@ import queue
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator
 
 from .config import cfg
 
@@ -220,14 +222,14 @@ class Vault:
                 logger.error(f"Vault put failed: {e}")
                 return False
 
-    def get(self, wallet_id: str) -> Optional[WalletEntry]:
+    def get(self, wallet_id: str) -> WalletEntry | None:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
             if not row:
                 return None
             return self._row_to_entry(row)
 
-    def get_by_address(self, address: str) -> Optional[WalletEntry]:
+    def get_by_address(self, address: str) -> WalletEntry | None:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM wallets WHERE address = ?", (address,)).fetchone()
             if not row:
@@ -343,7 +345,7 @@ class Vault:
         )
 
 
-_vault: Optional[Vault] = None
+_vault: Vault | None = None
 
 
 def get_vault() -> Vault:

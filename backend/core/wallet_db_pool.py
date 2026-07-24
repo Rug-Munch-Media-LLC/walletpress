@@ -39,7 +39,7 @@ class DbPool:
         self._max_size = max_size
         self._busy_timeout = busy_timeout
         self._lock = threading.Lock()
-        self._pool: OrderedDict[str, _PooledConn] = OrderedDict()
+        self._pool: Ordereddict[str, _PooledConn] = OrderedDict()
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
     def _new_conn(self) -> sqlite3.Connection:

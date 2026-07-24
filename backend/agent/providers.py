@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -50,7 +49,7 @@ class AIProvider:
         )
 
 
-def _ollama_auto_detect() -> Optional[AIProvider]:
+def _ollama_auto_detect() -> AIProvider | None:
     """Auto-detect a running Ollama instance on localhost or common ports."""
     import socket
     for port in [11434, 11435]:

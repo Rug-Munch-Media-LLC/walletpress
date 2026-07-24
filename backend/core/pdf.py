@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import logging
 import time
-from typing import Optional
 
 
 from core.config import cfg
@@ -27,7 +26,7 @@ except ImportError:
     HAS_QR = False
 
 
-def _qr_image(data: str, size: int = 200) -> Optional[ImageReader]:
+def _qr_image(data: str, size: int = 200) -> ImageReader | None:
     if not HAS_QR:
         return None
     import io
@@ -44,7 +43,7 @@ def _qr_image(data: str, size: int = 200) -> Optional[ImageReader]:
 def generate_paper_wallet(address: str, chain: str, private_key: str = "",
                           public_key: str = "", derivation_path: str = "",
                           created_at: float = 0.0, proof_leaf: str = "",
-                          label: str = "") -> Optional[bytes]:
+                          label: str = "") -> bytes | None:
     """Generate a printable paper wallet PDF.
 
     Returns PDF bytes or None if reportlab is not installed.
@@ -152,7 +151,7 @@ def generate_paper_wallet(address: str, chain: str, private_key: str = "",
 def generate_birth_certificate(wallet_id: str, address: str, chain: str,
                                public_key: str = "", created_at: float = 0.0,
                                proof_leaf: str = "", root_hash: str = "",
-                               committed: bool = False) -> Optional[bytes]:
+                               committed: bool = False) -> bytes | None:
     """Generate a Wallet Birth Certificate — printable provenance document.
 
     This is a unique feature. It cryptographically proves when and how

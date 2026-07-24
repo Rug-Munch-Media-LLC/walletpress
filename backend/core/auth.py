@@ -9,7 +9,6 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from fastapi import HTTPException, Request
 
@@ -23,7 +22,7 @@ class APIKey:
     label: str
     scopes: list[str]
     created_at: float
-    last_used_at: Optional[float] = None
+    last_used_at: float | None = None
     revoked: bool = False
     role: str = "operator"  # admin | operator | viewer
     owner: str = ""        # team key owner (email or user_id)
@@ -118,7 +117,7 @@ class KeyStore:
             self._save()
         return key_id, raw_key
 
-    def verify(self, raw_key: str) -> Optional[APIKey]:
+    def verify(self, raw_key: str) -> APIKey | None:
         """Verify a raw API key. Returns the APIKey on match, None on mismatch.
 
         PERFORMANCE: This method NO LONGER writes to disk on every call (P1-1).
@@ -158,7 +157,7 @@ class KeyStore:
             return False
         return role_has_at_least(key.role, required)
 
-    def get_role(self, raw_key: str) -> Optional[str]:
+    def get_role(self, raw_key: str) -> str | None:
         """Return the role of a verified key, or None if invalid."""
         key = self.verify(raw_key)
         return key.role if key else None
@@ -183,7 +182,7 @@ class KeyStore:
         return required_scope in key.scopes or "admin" in key.scopes
 
 
-_key_store: Optional[KeyStore] = None
+_key_store: KeyStore | None = None
 
 
 def get_key_store() -> KeyStore:

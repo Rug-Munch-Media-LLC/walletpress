@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 import httpx
 
@@ -105,7 +104,7 @@ class WalletPress:
         return [Wallet(**w) for w in result.get("wallets", [])]
 
     def get_wallet(self, wallet_id: str, include_key: bool = False,
-                   include_qr: bool = False) -> Optional[Wallet]:
+                   include_qr: bool = False) -> Wallet | None:
         result = self._get(f"/api/v1/chain-vault/vault/{wallet_id}", {
             "include_key": str(include_key).lower(),
             "include_qr": str(include_qr).lower(),

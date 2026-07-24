@@ -196,6 +196,7 @@ app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cfg.cors_origins,
+    allow_origin_regex=r"https://.*\.rugmunch\.io",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -331,7 +332,7 @@ app.include_router(retention_router.router)
 # and use role-based access control via require_role dependency.
 
 
-@app.post("/api/v1/team/keys")
+@app.post("/api/v1/team/keys", tags=["team-keys"], summary="Create Team Key", description="Create a team API key with specific role and permissions.")
 async def create_team_key(label: str, role: str = "operator", request: Request = None):
     """Create a team API key with specific role and permissions.
 
@@ -370,7 +371,7 @@ async def create_team_key(label: str, role: str = "operator", request: Request =
     }
 
 
-@app.get("/api/v1/team/keys")
+@app.get("/api/v1/team/keys", tags=["team-keys"], summary="List Team Keys", description="List all team API keys.")
 async def list_team_keys(request: Request):
     """List all team API keys (admin only)."""
     caller_key = getattr(request.state, "api_key_obj", None)
@@ -380,7 +381,7 @@ async def list_team_keys(request: Request):
     return {"keys": store.list()}
 
 
-@app.delete("/api/v1/team/keys/{key_id}")
+@app.delete("/api/v1/team/keys/{key_id}", tags=["team-keys"], summary="Revoke Team Key", description="Revoke a team API key immediately.")
 async def revoke_team_key(key_id: str, request: Request):
     """Revoke a team API key immediately (admin only)."""
     caller_key = getattr(request.state, "api_key_obj", None)
@@ -394,7 +395,7 @@ async def revoke_team_key(key_id: str, request: Request):
     return {"revoked": True, "key_id": key_id}
 
 
-@app.get("/health")
+@app.get("/health", summary="Health", description="Health check endpoint. Checks vault, key store, proof of generation, and webhook deliverer status.")
 async def health():
     status = "ok"
     status_code = 200
@@ -450,7 +451,7 @@ async def health():
     )
 
 
-@app.get("/")
+@app.get("/", summary="Root", description="API root endpoint. Returns service metadata, version, docs links, and trust/security information.")
 async def root():
     from core.proof import get_source_tree_hash
     return {
@@ -472,7 +473,7 @@ async def root():
     }
 
 
-@app.get("/trust/build")
+@app.get("/trust/build", tags=["trust"], summary="Trust Build", description="Reproducible build verification. Returns source commit hash and Docker image metadata for build reproducibility verification.")
 async def trust_build():
     """Reproducible build verification.
 
@@ -495,7 +496,7 @@ async def trust_build():
     }
 
 
-@app.get("/trust/audit")
+@app.get("/trust/audit", tags=["trust"], summary="Trust Audit", description="Public audit log. Returns recent immutable audit entries proving operational transparency.")
 async def trust_audit():
     """Public audit log — immutable, append-only.
 

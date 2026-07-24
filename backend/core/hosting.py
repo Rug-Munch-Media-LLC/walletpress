@@ -62,6 +62,7 @@ def _verify_password(stored_hash: str, plaintext: str) -> bool:
     if "$" not in stored_hash and len(stored_hash) == 64:
         try:
             import hashlib
+
             legacy_match = hashlib.sha256(plaintext.encode()).hexdigest() == stored_hash
             return legacy_match
         except Exception:
@@ -85,15 +86,41 @@ def _needs_rehash(stored_hash: str) -> bool:
 
 
 PLANS = {
-    "free": {"name": "Free", "price_usd": 0, "chains": 3, "daily_wallet_limit": 10, "api_access": False, "features": ["basic_generation"]},
-    "starter": {"name": "Starter", "price_usd": 29, "chains": 10, "daily_wallet_limit": 500, "api_access": True, "features": ["basic_generation", "batch", "mnemonic", "export"]},
-    "pro": {"name": "Pro", "price_usd": 79, "chains": 55, "daily_wallet_limit": 0, "api_access": True, "features": ["all"]},
-    "enterprise": {"name": "Enterprise", "price_usd": 199, "chains": 55, "daily_wallet_limit": 0, "api_access": True, "features": ["all", "2fa", "sla"]},
+    "free": {
+        "name": "Free",
+        "price_usd": 0,
+        "chains": 3,
+        "daily_wallet_limit": 10,
+        "api_access": False,
+        "features": ["basic_generation"],
+    },
+    "starter": {
+        "name": "Starter",
+        "price_usd": 29,
+        "chains": 10,
+        "daily_wallet_limit": 500,
+        "api_access": True,
+        "features": ["basic_generation", "batch", "mnemonic", "export"],
+    },
+    "pro": {
+        "name": "Pro",
+        "price_usd": 79,
+        "chains": 55,
+        "daily_wallet_limit": 0,
+        "api_access": True,
+        "features": ["all"],
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "price_usd": 199,
+        "chains": 55,
+        "daily_wallet_limit": 0,
+        "api_access": True,
+        "features": ["all", "2fa", "sla"],
+    },
 }
 
 
-<<<<<<< Updated upstream
-=======
 def _check_legacy_hashes() -> None:
     """Scan all users for legacy SHA-256 hashes on startup. Log WARNING for each."""
     try:
@@ -121,7 +148,6 @@ def _check_legacy_hashes() -> None:
         logger.warning(f"Legacy hash check failed: {e}")
 
 
->>>>>>> Stashed changes
 class HostingDB:
     """User and subscription management."""
 
@@ -200,9 +226,15 @@ class HostingDB:
                 email_verified, email_verify_token, email_verify_expires)
                VALUES (?, ?, ?, ?, 'free', ?, ?, ?, ?, ?)""",
             (
-                user_id, email, pw_hash, name, api_key, time.time(),
+                user_id,
+                email,
+                pw_hash,
+                name,
+                api_key,
+                time.time(),
                 0 if require_verify else 1,  # auto-verify if not required
-                verify_token, verify_expires,
+                verify_token,
+                verify_expires,
             ),
         )
         conn.commit()
@@ -250,9 +282,7 @@ class HostingDB:
     def is_email_verified(self, user_id: str) -> bool:
         """True if the user has verified their email (or verification is not required)."""
         conn = self._conn()
-        row = conn.execute(
-            "SELECT email_verified FROM users WHERE id = ?", (user_id,)
-        ).fetchone()
+        row = conn.execute("SELECT email_verified FROM users WHERE id = ?", (user_id,)).fetchone()
         conn.close()
         if not row:
             return False
@@ -329,7 +359,10 @@ class HostingDB:
             return True, ""  # Unlimited
         used = self.daily_usage(user_id)
         if used >= plan["daily_wallet_limit"]:
-            return False, f"Daily limit reached ({plan['daily_wallet_limit']} wallets). Upgrade at /hosting/plans"
+            return (
+                False,
+                f"Daily limit reached ({plan['daily_wallet_limit']} wallets). Upgrade at /hosting/plans",
+            )
         return True, ""
 
     def get_user(self, user_id: str) -> Optional[dict]:

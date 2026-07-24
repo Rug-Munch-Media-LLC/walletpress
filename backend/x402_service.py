@@ -255,14 +255,6 @@ async def generate(req: GenerateRequest, request: Request):
             }
             if req.derivation_path:
                 gen_kwargs["derivation_path"] = req.derivation_path
-<<<<<<< Updated upstream
-            wallet = generator.generate(**gen_kwargs)
-            wallets.append({
-                "index": i + 1, "address": wallet.address,
-                "private_key": wallet.private_key_hex, "mnemonic": wallet.mnemonic,
-                "derivation_path": wallet.derivation_path,
-            })
-=======
             wallet = generator.generate(**gen_kwargs)  # type: ignore[arg-type]
             wallets.append(
                 {
@@ -273,7 +265,6 @@ async def generate(req: GenerateRequest, request: Request):
                     "derivation_path": wallet.derivation_path,
                 }
             )
->>>>>>> Stashed changes
 
     conn = get_db()
     conn.execute(

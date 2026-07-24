@@ -24,7 +24,7 @@ from core.proof import get_proof
 from .tx_broadcaster import broadcast as broadcast_tx
 from core.vault import WalletEntry, get_vault
 from wallet_engine.chains import CHAINS, CHAIN_GROUPS, get_chains_for_tier
-from wallet_engine.generator import get_generator
+from wallet_engine.generator import CryptoError, CryptoInputError, get_generator
 
 logger = logging.getLogger("wp.chain_vault")
 
@@ -45,6 +45,137 @@ def _require_totp(request: Request) -> None:
     code = request.headers.get("X-TOTP-Code", "")
     if not mgr.verify(code):
         raise HTTPException(status_code=401, detail="TOTP code required or invalid. Set X-TOTP-Code header.")
+
+
+_INPUT_VALIDATION_ENABLED = True
+
+
+def _validate_private_key(pk: str) -> str:
+    """Validate and normalize a hex-encoded private key.
+    
+    Returns the normalized key (0x prefix removed).
+    Raises HTTPException 400 on invalid format.
+    """
+    raw = pk.strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Private key cannot be empty")
+    
+    # Check for common prefixes and strip them
+    raw = raw.removeprefix("0x").removeprefix("0X")
+    
+    if not all(c in "0123456789abcdefABCDEF" for c in raw):
+        raise HTTPException(status_code=400, detail="Private key must be a valid hex string")
+    
+    try:
+        key_bytes = bytes.fromhex(raw)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Private key must be a valid hex string")
+    
+    if len(key_bytes) not in (32, 64):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Private key must be 32 or 64 bytes (got {len(key_bytes)} bytes; expected 64 or 128 hex chars)"
+        )
+    
+    return raw
+
+
+_MNEMONIC_REQUIRE_BIP39_VALIDATION = True
+
+
+def _validate_mnemonic_format(mnemonic: str) -> str:
+    """Validate mnemonic phrase format before passing to BIP39 validator.
+    
+    Returns the cleaned mnemonic. Raises HTTPException 400 on invalid format.
+    """
+    cleaned = mnemonic.strip().lower()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Mnemonic phrase cannot be empty")
+    
+    words = cleaned.split()
+    if len(words) not in (12, 15, 18, 21, 24):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mnemonic length: {len(words)} words. "
+                   f"BIP39 requires 12, 15, 18, 21, or 24 words (got {len(words)})"
+        )
+    
+    # Check for non-alphabetic characters
+    for w in words:
+        if not w.isalpha():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid word in mnemonic: '{w[:8]}...'. BIP39 words are alphabetic."
+            )
+    
+    return cleaned
+
+
+def _validate_address_for_chain(chain: str, address: str) -> None:
+    """Validate an address format for a specific chain.
+    
+    Raises HTTPException 400 if the address doesn't match the chain's pattern.
+    This is a format check, not an on-chain existence check.
+    """
+    import re
+    chain_info = CHAINS.get(chain.lower())
+    if not chain_info:
+        raise HTTPException(status_code=400, detail=f"Unsupported chain: {chain}")
+    
+    if chain_info.address_pattern and not re.match(chain_info.address_pattern, address):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Address '{address[:20]}...' does not match expected pattern for {chain}: {chain_info.address_pattern}"
+        )
+
+
+def _rollback_wallets(vault, wallet_ids: list[str]) -> None:
+    """Delete wallets that were created during a failed batch operation.
+    
+    This ensures no orphaned wallets remain when a batch fails partway through.
+    Each deletion is logged. Failures during rollback are logged but not re-raised.
+    """
+    if not wallet_ids:
+        return
+    logger.warning("Rolling back %d wallets after failed batch operation", len(wallet_ids))
+    for wid in wallet_ids:
+        try:
+            vault.delete(wid)
+            logger.info("Rollback deleted wallet: %s", wid)
+        except Exception as e:
+            logger.error("Rollback failed to delete wallet %s: %s", wid, e)
+
+
+def _safe_crypto_call(operation_name: str, fn, *args, **kwargs):
+    """Execute a crypto operation with proper error translation.
+    
+    Translates CryptoError -> HTTP 500, CryptoInputError/ValueError -> HTTP 400.
+    All other exceptions -> HTTP 500 with logged error.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except (CryptoInputError, ValueError) as e:
+        logger.warning("Crypto input error in %s: %s", operation_name, e)
+        raise HTTPException(status_code=400, detail=str(e))
+    except CryptoError as e:
+        logger.error("Crypto operation failed in %s: %s", operation_name, e)
+        raise HTTPException(status_code=500, detail=f"Crypto operation failed: {e}")
+    except Exception as e:
+        logger.exception("Unexpected error in %s: %s", operation_name, e)
+        raise HTTPException(status_code=500, detail=f"Unexpected error during {operation_name}: {e}")
+
+
+def _safe_generate(generator, operation: str, chain: str, **kwargs):
+    """Safely call generator.generate() with error translation."""
+    return _safe_crypto_call(f"generate.{operation}", generator.generate, chain, **kwargs)
+
+
+def _safe_import(generator, operation: str, chain: str, private_key: str, **kwargs):
+    """Safely call generator.import_from_private_key() with error translation."""
+    return _safe_crypto_call(
+        f"import.{operation}",
+        generator.import_from_private_key, chain, private_key, **kwargs
+    )
 
 # ── Models ───────────────────────────────────────────────────────
 
@@ -403,37 +534,45 @@ async def generate_wallet(req: GenerateRequest, request: Request):
     generator = get_generator(cfg.vault_password)
     vault = get_vault()
     wallets = []
+    created_ids: list[str] = []
 
     for i in range(req.count):
-        label = req.label or f"{req.chain}_{i + 1}_{int(time.time())}"
         try:
-            wallet = generator.generate(req.chain, label=label, tags=req.tags)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            label = req.label or f"{req.chain}_{i + 1}_{int(time.time())}"
+            wallet = _safe_generate(generator, "single", req.chain, label=label, tags=req.tags)
 
-        entry = WalletEntry(
-            id=f"wp_{secrets.token_hex(8)}",
-            chain=wallet.chain,
-            address=wallet.address,
-            label=wallet.label,
-            tags=wallet.tags,
-            created_at=wallet.created_at,
-            encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
-            public_key=wallet.public_key_hex,
-            derivation_path=wallet.derivation_path,
-            hd_path=wallet.derivation_path,
-            encrypted=wallet.encrypted,
-        )
-        vault.put(entry)
+            entry = WalletEntry(
+                id=f"wp_{secrets.token_hex(8)}",
+                chain=wallet.chain,
+                address=wallet.address,
+                label=wallet.label,
+                tags=wallet.tags,
+                created_at=wallet.created_at,
+                encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
+                public_key=wallet.public_key_hex,
+                derivation_path=wallet.derivation_path,
+                hd_path=wallet.derivation_path,
+                encrypted=wallet.encrypted,
+            )
+            vault.put(entry)
+            created_ids.append(entry.id)
+        except HTTPException:
+            # Rollback any wallets created so far
+            _rollback_wallets(vault, created_ids)
+            raise
 
         # Create Proof of Generation attestation
-        proof = get_proof()
-        leaf_hash = proof.attest(
-            wallet_id=entry.id,
-            chain=entry.chain,
-            address=entry.address,
-            public_key_hex=entry.public_key,
-        )
+        try:
+            proof = get_proof()
+            leaf_hash = proof.attest(
+                wallet_id=entry.id,
+                chain=entry.chain,
+                address=entry.address,
+                public_key_hex=entry.public_key,
+            )
+        except Exception as e:
+            logger.error("Proof attestation failed for wallet %s: %s", entry.id, e)
+            leaf_hash = ""
         wallets.append({**entry.__dict__, "proof_leaf": leaf_hash})
 
         # Fire webhook event + email notification
@@ -461,9 +600,12 @@ async def generate_wallet(req: GenerateRequest, request: Request):
     proof_db = get_proof()
     pstats = proof_db.stats()
     if pstats["total_attestations"] > 0 and pstats["total_attestations"] % 100 < req.count:
-        root_hash, count = proof_db.compute_merkle_root()
-        if root_hash:
-            proof_db.commit(root_hash, count)
+        try:
+            root_hash, count = proof_db.compute_merkle_root()
+            if root_hash:
+                proof_db.commit(root_hash, count)
+        except Exception as e:
+            logger.error("Merkle root commit failed: %s", e)
 
     return {
         "generated": len(wallets),
@@ -484,24 +626,27 @@ async def generate_batch(req: BatchGenerateRequest, request: Request):
     generator = get_generator(cfg.vault_password)
     vault = get_vault()
     results = {}
+    created_ids: list[str] = []
 
     for chain in req.chains:
         try:
-            wallet = generator.generate(chain, label=f"{req.label_prefix}_{chain}" if req.label_prefix else chain)
-        except ValueError as e:
-            results[chain] = {"error": str(e)}
-            continue
-
-        entry = WalletEntry(
-            id=f"wp_{secrets.token_hex(8)}",
-            chain=wallet.chain, address=wallet.address, label=wallet.label,
-            tags=wallet.tags, created_at=wallet.created_at,
-            encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
-            public_key=wallet.public_key_hex, derivation_path=wallet.derivation_path,
-            hd_path=wallet.derivation_path, encrypted=wallet.encrypted,
-        )
-        vault.put(entry)
-        results[chain] = {"id": entry.id, "address": entry.address, "label": entry.label}
+            label = f"{req.label_prefix}_{chain}" if req.label_prefix else chain
+            wallet = _safe_generate(generator, "batch", chain, label=label)
+            entry = WalletEntry(
+                id=f"wp_{secrets.token_hex(8)}",
+                chain=wallet.chain, address=wallet.address, label=wallet.label,
+                tags=wallet.tags, created_at=wallet.created_at,
+                encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
+                public_key=wallet.public_key_hex, derivation_path=wallet.derivation_path,
+                hd_path=wallet.derivation_path, encrypted=wallet.encrypted,
+            )
+            vault.put(entry)
+            created_ids.append(entry.id)
+            results[chain] = {"id": entry.id, "address": entry.address, "label": entry.label}
+        except HTTPException:
+            logger.warning("Batch generate failed at chain %s, rolling back %d wallets", chain, len(created_ids))
+            _rollback_wallets(vault, created_ids)
+            raise
 
     return {"chains_generated": len(req.chains), "wallets": results}
 
@@ -517,20 +662,27 @@ async def generate_all(req: GenerateAllRequest, request: Request):
     generator = get_generator(cfg.vault_password)
     vault = get_vault()
     results = {}
+    created_ids: list[str] = []
 
     for chain_key in CHAINS:
-        label = f"{req.label_prefix}_{chain_key}" if req.label_prefix else f"full_suite_{chain_key}"
-        wallet = generator.generate(chain_key, label=label)
-        entry = WalletEntry(
-            id=f"wp_{secrets.token_hex(8)}",
-            chain=wallet.chain, address=wallet.address, label=wallet.label,
-            tags=wallet.tags, created_at=wallet.created_at,
-            encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
-            public_key=wallet.public_key_hex, derivation_path=wallet.derivation_path,
-            hd_path=wallet.derivation_path, encrypted=wallet.encrypted,
-        )
-        vault.put(entry)
-        results[chain_key] = {"id": entry.id, "address": entry.address}
+        try:
+            label = f"{req.label_prefix}_{chain_key}" if req.label_prefix else f"full_suite_{chain_key}"
+            wallet = _safe_generate(generator, "all", chain_key, label=label)
+            entry = WalletEntry(
+                id=f"wp_{secrets.token_hex(8)}",
+                chain=wallet.chain, address=wallet.address, label=wallet.label,
+                tags=wallet.tags, created_at=wallet.created_at,
+                encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
+                public_key=wallet.public_key_hex, derivation_path=wallet.derivation_path,
+                hd_path=wallet.derivation_path, encrypted=wallet.encrypted,
+            )
+            vault.put(entry)
+            created_ids.append(entry.id)
+            results[chain_key] = {"id": entry.id, "address": entry.address}
+        except HTTPException:
+            logger.warning("Generate all failed at chain %s, rolling back %d wallets", chain_key, len(created_ids))
+            _rollback_wallets(vault, created_ids)
+            raise
 
     return {"total_wallets": len(results), "wallets": results}
 
@@ -544,12 +696,13 @@ async def import_wallet(req: ImportRequest, request: Request):
     We never log or transmit the raw key.
     """
     _audit("wallet.import", request, detail={"chain": req.chain})
+
+    # Validate private key format at router level before touching the generator
+    _validate_private_key(req.private_key)
+
     generator = get_generator(cfg.vault_password)
 
-    try:
-        wallet = generator.import_from_private_key(req.chain, req.private_key, label=req.label, tags=req.tags)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    wallet = _safe_import(generator, "import", req.chain, req.private_key, label=req.label, tags=req.tags)
 
     vault = get_vault()
     entry = WalletEntry(
@@ -577,6 +730,9 @@ async def from_mnemonic(req: FromMnemonicRequest, request: Request):
     """
     _audit("wallet.from_mnemonic", request)
 
+    # Validate mnemonic format at router level
+    _validate_mnemonic_format(req.mnemonic)
+
     from wallet_engine.generator import validate_mnemonic
     try:
         mnemonic = validate_mnemonic(req.mnemonic)
@@ -587,13 +743,17 @@ async def from_mnemonic(req: FromMnemonicRequest, request: Request):
     generator = get_generator(cfg.vault_password)
     vault = get_vault()
     results = {}
+    created_ids: list[str] = []
 
     for chain_key in chains:
         try:
-            wallet = generator.generate(chain_key, mnemonic=mnemonic, passphrase=req.passphrase,
-                                        label=f"mnemonic_{chain_key}")
-        except ValueError:
-            results[chain_key] = {"error": "Chain not supported"}
+            wallet = _safe_generate(
+                generator, "mnemonic", chain_key,
+                mnemonic=mnemonic, passphrase=req.passphrase,
+                label=f"mnemonic_{chain_key}"
+            )
+        except HTTPException:
+            results[chain_key] = {"error": "Chain not supported or generation failed"}
             continue
 
         entry = WalletEntry(
@@ -606,6 +766,7 @@ async def from_mnemonic(req: FromMnemonicRequest, request: Request):
             encrypted=wallet.encrypted,
         )
         vault.put(entry)
+        created_ids.append(entry.id)
         results[chain_key] = {
             "address": entry.address,
             "derivation_path": entry.derivation_path,
@@ -625,6 +786,9 @@ async def derive_address(req: DeriveAddressRequest, request: Request):
     """Derive a single address from a mnemonic + chain + optional path."""
     _audit("wallet.derive", request, detail={"chain": req.chain, "path": req.path})
 
+    # Validate mnemonic format
+    _validate_mnemonic_format(req.mnemonic)
+
     from wallet_engine.generator import validate_mnemonic
     try:
         mnemonic = validate_mnemonic(req.mnemonic)
@@ -632,10 +796,7 @@ async def derive_address(req: DeriveAddressRequest, request: Request):
         raise HTTPException(status_code=400, detail=str(e))
 
     generator = get_generator(cfg.vault_password)
-    try:
-        wallet = generator.generate(req.chain, mnemonic=mnemonic, label="derived")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    wallet = _safe_generate(generator, "derive", req.chain, mnemonic=mnemonic, label="derived")
 
     return {
         "mnemonic": req.mnemonic[:20] + "...",
@@ -655,23 +816,35 @@ async def create_hd_wallet(req: HDWalletRequest, request: Request):
     """
     _audit("wallet.hd_wallet", request)
 
+    # Validate mnemonic format
+    _validate_mnemonic_format(req.mnemonic)
+
     generator = get_generator(cfg.vault_password)
     vault = get_vault()
     results = {}
+    created_ids: list[str] = []
 
     for chain_key in list(CHAINS.keys())[:5]:
-        wallet = generator.generate(chain_key, mnemonic=req.mnemonic, passphrase=req.passphrase,
-                                    label=f"hd_{chain_key}")
-        entry = WalletEntry(
-            id=f"wp_hd_{secrets.token_hex(4)}",
-            chain=wallet.chain, address=wallet.address, label=wallet.label,
-            tags=["hd_wallet"], created_at=wallet.created_at,
-            encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
-            public_key=wallet.public_key_hex, derivation_path=wallet.derivation_path,
-            mnemonic_encrypted=wallet.mnemonic, encrypted=wallet.encrypted,
-        )
-        vault.put(entry)
-        results[chain_key] = {"address": entry.address, "derivation_path": entry.derivation_path}
+        try:
+            wallet = _safe_generate(
+                generator, "hd", chain_key,
+                mnemonic=req.mnemonic, passphrase=req.passphrase,
+                label=f"hd_{chain_key}"
+            )
+            entry = WalletEntry(
+                id=f"wp_hd_{secrets.token_hex(4)}",
+                chain=wallet.chain, address=wallet.address, label=wallet.label,
+                tags=["hd_wallet"], created_at=wallet.created_at,
+                encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
+                public_key=wallet.public_key_hex, derivation_path=wallet.derivation_path,
+                mnemonic_encrypted=wallet.mnemonic, encrypted=wallet.encrypted,
+            )
+            vault.put(entry)
+            created_ids.append(entry.id)
+            results[chain_key] = {"address": entry.address, "derivation_path": entry.derivation_path}
+        except HTTPException:
+            _rollback_wallets(vault, created_ids)
+            raise
 
     return {
         "hd_wallet_created": True,
@@ -772,7 +945,12 @@ async def get_wallet(wallet_id: str, request: Request, include_key: bool = False
 
         if wallet.encrypted_key and wallet.encrypted:
             generator = get_generator(cfg.vault_password)
-            response["private_key_hex"] = generator.decrypt_key(wallet.encrypted_key)
+            try:
+                response["private_key_hex"] = generator.decrypt_key(wallet.encrypted_key)
+            except CryptoInputError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except CryptoError as e:
+                raise HTTPException(status_code=500, detail=f"Key decryption failed: {e}")
         elif wallet.encrypted_key:
             response["private_key_hex"] = wallet.encrypted_key
         else:
@@ -859,18 +1037,25 @@ async def cluster_generate(req: ClusterRequest, request: Request):
     generator = get_generator(cfg.vault_password)
     vault = get_vault()
     wallets = []
+    created_ids: list[str] = []
 
     for i in range(req.count):
-        wallet = generator.generate(req.chain, label=f"cluster_{req.chain}_{i + 1}", tags=["cluster"])
-        entry = WalletEntry(
-            id=f"wp_cluster_{secrets.token_hex(4)}",
-            chain=wallet.chain, address=wallet.address,
-            label=wallet.label, tags=wallet.tags, created_at=wallet.created_at,
-            encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
-            encrypted=wallet.encrypted,
-        )
-        vault.put(entry)
-        wallets.append({"id": entry.id, "address": entry.address, "label": entry.label})
+        try:
+            wallet = _safe_generate(generator, "cluster", req.chain,
+                                     label=f"cluster_{req.chain}_{i + 1}", tags=["cluster"])
+            entry = WalletEntry(
+                id=f"wp_cluster_{secrets.token_hex(4)}",
+                chain=wallet.chain, address=wallet.address,
+                label=wallet.label, tags=wallet.tags, created_at=wallet.created_at,
+                encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
+                encrypted=wallet.encrypted,
+            )
+            vault.put(entry)
+            created_ids.append(entry.id)
+            wallets.append({"id": entry.id, "address": entry.address, "label": entry.label})
+        except HTTPException:
+            _rollback_wallets(vault, created_ids)
+            raise
 
     return {
         "cluster_size": len(wallets),
@@ -901,8 +1086,11 @@ async def rotate_wallet(req: RotateRequest, request: Request):
         raise HTTPException(status_code=404, detail="Wallet not found")
 
     generator = get_generator(cfg.vault_password)
-    new_wallet = generator.generate(old_wallet.chain, label=f"rotation_{old_wallet.chain}_{int(time.time())}",
-                                    tags=["rotated", "active"])
+    new_wallet = _safe_generate(
+        generator, "rotate", old_wallet.chain,
+        label=f"rotation_{old_wallet.chain}_{int(time.time())}",
+        tags=["rotated", "active"]
+    )
 
     new_entry = WalletEntry(
         id=f"wp_{secrets.token_hex(8)}",
@@ -913,7 +1101,13 @@ async def rotate_wallet(req: RotateRequest, request: Request):
         encrypted=new_wallet.encrypted,
     )
     vault.put(new_entry)
-    vault.record_rotation(old_wallet.id, new_wallet.address, reason=req.reason)
+    try:
+        vault.record_rotation(old_wallet.id, new_wallet.address, reason=req.reason)
+    except Exception as e:
+        # Rollback the new wallet if rotation recording fails
+        logger.error("Failed to record rotation for %s -> %s: %s", old_wallet.id, new_entry.id, e)
+        vault.delete(new_entry.id)
+        raise HTTPException(status_code=500, detail=f"Rotation recording failed: {e}")
 
     return {
         "rotated": True,
@@ -945,7 +1139,10 @@ async def rotate_sweep(req: RotateSweepRequest, request: Request):
         raise HTTPException(status_code=404, detail="Wallet not found")
 
     generator = get_generator(cfg.vault_password)
-    new_wallet = generator.generate(old_wallet.chain, label=f"sweep_{int(time.time())}", tags=["swept"])
+    new_wallet = _safe_generate(
+        generator, "sweep", old_wallet.chain,
+        label=f"sweep_{int(time.time())}", tags=["swept"]
+    )
 
     new_entry = WalletEntry(
         id=f"wp_{secrets.token_hex(8)}",
@@ -956,7 +1153,12 @@ async def rotate_sweep(req: RotateSweepRequest, request: Request):
         encrypted=new_wallet.encrypted,
     )
     vault.put(new_entry)
-    vault.record_rotation(old_wallet.id, req.to_address, reason="sweep")
+    try:
+        vault.record_rotation(old_wallet.id, req.to_address, reason="sweep")
+    except Exception as e:
+        logger.error("Failed to record sweep rotation for %s: %s", old_wallet.id, e)
+        vault.delete(new_entry.id)
+        raise HTTPException(status_code=500, detail=f"Sweep rotation recording failed: {e}")
 
     return {
         "rotated": True,
@@ -1059,7 +1261,12 @@ async def paper_wallet(wallet_id: str, request: Request):
     private_key = ""
     if wallet.encrypted_key and wallet.encrypted:
         generator = get_generator(cfg.vault_password)
-        private_key = generator.decrypt_key(wallet.encrypted_key)
+        try:
+            private_key = generator.decrypt_key(wallet.encrypted_key)
+        except CryptoInputError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except CryptoError as e:
+            raise HTTPException(status_code=500, detail=f"Key decryption failed: {e}")
     elif wallet.encrypted_key:
         private_key = wallet.encrypted_key
 
@@ -1284,7 +1491,7 @@ async def temporal_create(req: TemporalCreateRequest, request: Request):
     _audit("temporal.create", request, detail={"chain": req.chain, "ttl": req.ttl_seconds})
 
     generator = get_generator(cfg.vault_password)
-    wallet = generator.generate(req.chain, label=req.label, tags=["temporal"])
+    wallet = _safe_generate(generator, "temporal", req.chain, label=req.label, tags=["temporal"])
     temporal_id = f"tmp_{secrets.token_hex(8)}"
     expires_at = time.time() + req.ttl_seconds
 

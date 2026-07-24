@@ -37,6 +37,7 @@ from core.rate_limit import RateLimitMiddleware
 from core.webhooks import get_webhook_deliverer
 from core.ip_allowlist import IPAllowlistMiddleware
 from core.license_check import LicenseMiddleware
+from core.jwt_auth import JWTValidationMiddleware
 from routers import chain_vault, wallet_admin, wallet_analysis, wallet_memory, test_vectors, metrics as metrics_router
 from routers import airdrop as airdrop_router, health_monitor as health_router
 from routers import hosting as hosting_router, license_router as license_router
@@ -204,6 +205,7 @@ if cfg.rate_limit_per_minute > 0:
     app.add_middleware(RateLimitMiddleware, rate=cfg.rate_limit_per_minute)
 
 app.add_middleware(metrics_router.MetricsMiddleware)
+app.add_middleware(JWTValidationMiddleware)
 app.add_middleware(IPAllowlistMiddleware)
 app.add_middleware(LicenseMiddleware)
 

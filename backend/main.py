@@ -207,6 +207,30 @@ if cfg.rate_limit_per_minute > 0:
     app.add_middleware(RateLimitMiddleware, rate=cfg.rate_limit_per_minute)
 
 app.add_middleware(metrics_router.MetricsMiddleware)
+
+@app.middleware("http")
+async def enforce_json_content_type(request: Request, call_next):
+    """PEN-TEST: Reject non-JSON Content-Type on write endpoints.
+    
+    POST/PUT/PATCH/DELETE must use application/json (file uploads via multipart exempted).
+    Prevents content-type smuggling and bypass of JSON validation.
+    """
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        path = request.url.path
+        exempt = ("/health", "/docs", "/openapi.json", "/metrics", "/mcp/", "/ws/")
+        if not path.startswith(exempt):
+            ct = (request.headers.get("content-type") or "").lower().strip()
+            if ct and not ct.startswith("application/json") and not ct.startswith("multipart/form-data"):
+                return JSONResponse(
+                    status_code=415,
+                    content={
+                        "detail": "Unsupported media type. Use Content-Type: application/json.",
+                        "code": "unsupported_media_type",
+                    },
+                )
+    return await call_next(request)
+
+
 app.add_middleware(JWTValidationMiddleware)
 app.add_middleware(IPAllowlistMiddleware)
 app.add_middleware(LicenseMiddleware)
@@ -607,10 +631,52 @@ async def websocket_events(ws: WebSocket):
 
     Rate limit: 10 messages/second per connection.
 
-    Authentication: Pass API key as ?token= query parameter.
+    Authentication (security-hardened):
+      Priority 1: Sec-WebSocket-Protocol header (e.g. "wp-auth-<API_KEY>")
+      Priority 2: First JSON message with {"token": "<API_KEY>"}
+      [DEPRECATED] ?token= query parameter — logs warning, will be removed
+      NEVER use URL query params for auth tokens — they leak to access logs.
     """
+    import asyncio as _asyncio
     await ws.accept()
-    token = ws.query_params.get("token", "")
+
+    # ── Extract token securely (never from URL query params) ──
+    token = ""
+
+    # Priority 1: Sec-WebSocket-Protocol header (does not appear in access logs)
+    protocols = ws.headers.get("sec-websocket-protocol", "")
+    for p in protocols.split(","):
+        p = p.strip()
+        if p.startswith("wp-auth-"):
+            token = p[8:]
+            break
+
+    # Priority 2: First WebSocket message (within 5s timeout)
+    if not token:
+        try:
+            auth_msg = await _asyncio.wait_for(ws.receive_json(), timeout=5.0)
+            token = auth_msg.get("token", "")
+            # If auth message also contains subscribe data, apply it immediately
+            if token and "subscribe" in auth_msg:
+                subs = auth_msg["subscribe"]
+                if isinstance(subs, list) and all(isinstance(s, str) for s in subs):
+                    _ws_clients[ws] = set(subs)
+        except (_asyncio.TimeoutError, _asyncio.CancelledError):
+            pass
+        except Exception:
+            pass
+
+    # [DEPRECATED] Fallback: query parameter — leaks to logs
+    if not token:
+        query_token = ws.query_params.get("token", "")
+        if query_token:
+            logger.warning(
+                "DEPRECATED: WebSocket ?token= query parameter used. "
+                "This leaks tokens to access logs. Use Sec-WebSocket-Protocol header instead."
+            )
+            token = query_token
+
+    # ── Verify token ──
     if token:
         from core.auth import get_key_store
         ks = get_key_store()
@@ -618,8 +684,11 @@ async def websocket_events(ws: WebSocket):
             await ws.send_json({"error": "Invalid API key"})
             await ws.close()
             return
-    _ws_clients[ws] = set()
+
+    if ws not in _ws_clients:
+        _ws_clients[ws] = set()
     _ws_rate[ws] = time.monotonic()
+
     try:
         while True:
             data = await ws.receive_text()

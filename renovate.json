@@ -1,0 +1,17 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": ["config:recommended"],
+	"schedule": ["before 3am on Monday"],
+	"packageRules": [
+		{
+			"matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+			"automerge": true
+		},
+		{ "matchDepTypes": ["devDependencies"], "automerge": true },
+		{
+			"matchManagers": ["pip_requirements", "pip_setup", "pip"],
+			"groupName": "Python pip dependencies",
+			"groupSlug": "python-pip"
+		}
+	]
+}

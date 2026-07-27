@@ -61,7 +61,8 @@ extend-ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may have imports after docstrings for setup convenience
-"tests/*" = ["E402"]
+# Test vault passwords and secrets are not real secrets
+"tests/*" = ["E402", "S105", "S106", "S108"]
 # mcp_server uses local imports to break circular dependencies
 "agent/mcp_server.py" = ["E402"]
 "main.py" = ["E402"]

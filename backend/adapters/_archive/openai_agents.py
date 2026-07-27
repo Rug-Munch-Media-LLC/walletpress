@@ -1,6 +1,7 @@
 """OpenAI Agents SDK Adapter — Use WalletPress tools with OpenAI Agents SDK."""
 from __future__ import annotations
 
+
 def get_tools() -> list[dict]:
     """Get all MCP tools as OpenAI function-calling format."""
     from agent.mcp_server import mcp

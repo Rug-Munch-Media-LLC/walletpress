@@ -94,8 +94,6 @@ paths = [
   '''\.ruff_cache/''',
   '''\.mypy_cache/''',
   '''vendor/''',
-  '''scripts/''',
-  '''AGENTS\.md''',
 ]
 
 # Stopwords (false-positive patterns to ignore)

@@ -1,0 +1,4 @@
+# WalletPress — root docker-compose.yml (development)
+# Canonical config lives in backend/docker-compose.yml.
+include:
+  - backend/docker-compose.yml

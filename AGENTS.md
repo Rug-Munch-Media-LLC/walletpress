@@ -15,7 +15,7 @@ Wallet-as-a-service. Wallet engine, x402 service, chain vault, hosting. CLI for 
 - Source: `https://github.com/RugMunchMedia/walletpress`
 
 ## Built With
-- Standards: [github.com/RugMunchMedia/standards](https://github.com/RugMunchMedia/standards)
+- Standards: See the project documentation for development standards
 - Toolchain: See README.md for development toolchain
 - Conventions: See CONTRIBUTING.md for coding conventions
 
@@ -72,7 +72,7 @@ demonstrates wallet management patterns — it is NOT the complete RugMunch
 production wallet infrastructure. The managed platform at rugmunch.io
 includes production key management, enterprise SSO/RBAC, and admin features.
 
-See [METHODOLOGY-PROTECTION.md](https://github.com/RugMunchMedia/standards/blob/main/METHODOLOGY-PROTECTION.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project methodology.
 for details on what information belongs in public vs private repos.
 
 ## Git Policy

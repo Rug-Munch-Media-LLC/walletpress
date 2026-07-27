@@ -1,18 +1,28 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS builder
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends     gcc libffi-dev libssl-dev &&     rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc=4:14.2.0-1 \
+    libffi-dev=3.4.8-2 \
+    libssl-dev=3.5.6-1~deb13u2 && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-FROM python:3.12-slim AS runner
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS runner
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /app
 
 # Install runtime deps (no gcc needed)
-RUN apt-get update && apt-get install -y --no-install-recommends     libssl-dev &&     rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl-dev=3.5.6-1~deb13u2 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy Python deps from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
@@ -38,7 +48,8 @@ USER walletpress
 
 EXPOSE 8010
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')" || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8010"]

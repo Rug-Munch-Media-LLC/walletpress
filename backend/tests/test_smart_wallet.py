@@ -1,4 +1,5 @@
 """Tests: Smart Wallet -- social recovery, dead man's switch, timelocks."""
+
 import os
 import tempfile
 import time
@@ -13,6 +14,7 @@ os.environ["WP_VAULT_PASSWORD"] = "test-vault-password"
 os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_sw_")
 
 from core.config import cfg
+
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
 from core.smart_wallet import SmartWalletManager
@@ -74,11 +76,15 @@ def test_request_recovery_with_sufficient_guardians():
         patch.object(sw, "_verify_claimant_signature", return_value=True),
     ):
         with patch.object(
-            sw, "_execute_recovery",
+            sw,
+            "_execute_recovery",
             return_value={"success": True, "new_address": "0xNEW"},
         ):
             result = sw.request_recovery(
-                "wallet_r3", "0xNEW", "eth", sigs,
+                "wallet_r3",
+                "0xNEW",
+                "eth",
+                sigs,
                 claimant_signature="0xVALID",
             )
 
@@ -95,7 +101,10 @@ def test_recovery_requires_claimant_signature():
 
     with patch.object(sw, "_verify_signature", return_value=True):
         result = sw.request_recovery(
-            "wallet_r4", "0xNEW", "eth", sigs,
+            "wallet_r4",
+            "0xNEW",
+            "eth",
+            sigs,
             claimant_signature="",
         )
 
@@ -117,7 +126,10 @@ def test_recovery_with_invalid_claimant_signature():
             addr.lower() in [g.lower() for g in guardians]
         )
         result = sw.request_recovery(
-            "wallet_r5", "0xNEW", "eth", sigs,
+            "wallet_r5",
+            "0xNEW",
+            "eth",
+            sigs,
             claimant_signature="0xBAD",
         )
 
@@ -167,7 +179,8 @@ def test_trigger_deadman_after_timer():
     later = now + 35 * 86400
     with patch("core.smart_wallet.time.time", return_value=later):
         with patch.object(
-            sw, "_execute_recovery",
+            sw,
+            "_execute_recovery",
             return_value={"success": True, "new_address": "0xNEW"},
         ):
             result = sw.trigger_deadman("wallet_d5", "0xHEIR", "0xSIG")
@@ -261,3 +274,163 @@ def test_stats():
     assert s["recovery_configs"] >= 1
     assert s["deadman_switches"] >= 1
     assert s["timelocks_total"] >= 1
+
+
+# ── Additional Edge Cases ─────────────────────────────────────────────────────
+
+
+def test_setup_recovery_threshold_validation():
+    sw = _sw()
+    # Threshold must be >= 1
+    err = sw.setup_recovery("wallet_bad_t", ["0xA", "0xB"], threshold=0)
+    assert "error" in err
+    # Threshold cannot exceed guardian count
+    err = sw.setup_recovery("wallet_bad_t2", ["0xA"], threshold=3)
+    assert "error" in err
+
+
+def test_get_recovery_config_not_found():
+    sw = _sw()
+    config = sw.get_recovery_config("nonexistent_wallet")
+    assert config is None
+
+
+def test_recovery_no_config():
+    sw = _sw()
+    result = sw.request_recovery("no_config_wallet", "0xNEW", "eth", [])
+    assert "error" in result
+    assert "No recovery configuration" in result["error"]
+
+
+def test_get_recovery_status():
+    sw = _sw()
+    sw.setup_recovery("status_test", ["0xA", "0xB"], threshold=2)
+    status = sw.get_recovery_status("status_test")
+    assert status["configured"] is True
+    assert status["config"] is not None
+    assert isinstance(status["requests"], list)
+
+
+def test_get_recovery_status_not_configured():
+    sw = _sw()
+    status = sw.get_recovery_status("no_config")
+    assert status["configured"] is False
+
+
+def test_ping_deadman():
+    sw = _sw()
+    sw.setup_deadman("ping_test", "0xHEIR", timeout_days=30)
+    result = sw.ping_deadman("ping_test")
+    assert result["reset"] is True
+    assert result["wallet_id"] == "ping_test"
+
+
+def test_ping_deadman_not_found():
+    sw = _sw()
+    result = sw.ping_deadman("nonexistent")
+    assert result["reset"] is False
+
+
+def test_check_deadman_not_found():
+    sw = _sw()
+    status = sw.check_deadman("no_dms")
+    assert status["active"] is False
+
+
+def test_trigger_deadman_not_configured():
+    sw = _sw()
+    result = sw.trigger_deadman("no_config", "0xHEIR")
+    assert "error" in result
+
+
+def test_trigger_deadman_wrong_heir():
+    sw = _sw()
+    sw.setup_deadman("heir_test", "0xREAL_HEIR", timeout_days=30)
+    # Use time travel to make it expired
+    now = 1_000_000.0
+    with patch("core.smart_wallet.time.time", return_value=now):
+        sw.setup_deadman("heir_test2", "0xREAL_HEIR", timeout_days=30)
+    later = now + 35 * 86400
+    with patch("core.smart_wallet.time.time", return_value=later):
+        result = sw.trigger_deadman("heir_test2", "0xWRONG_ADDR")
+    assert "error" in result
+    assert "heir" in result["error"].lower()
+
+
+def test_trigger_deadman_already_triggered():
+    sw = _sw()
+    now = 1_000_000.0
+    with patch("core.smart_wallet.time.time", return_value=now):
+        sw.setup_deadman("already_done", "0xHEIR", heir_chain="eth", timeout_days=30)
+    later = now + 35 * 86400
+    with patch("core.smart_wallet.time.time", return_value=later):
+        with patch.object(
+            sw, "_execute_recovery", return_value={"success": True, "new_address": "0xNEW"}
+        ):
+            result = sw.trigger_deadman("already_done", "0xHEIR")
+    assert result.get("triggered") is True
+    # Try again — should fail
+    with patch("core.smart_wallet.time.time", return_value=later):
+        result2 = sw.trigger_deadman("already_done", "0xHEIR")
+    assert "error" in result2
+    assert "already triggered" in result2["error"].lower()
+
+
+def test_cancel_timelock():
+    sw = _sw()
+    future = time.time() + 3600
+    tl = sw.create_timelock("cancel_test", "0xDEST", "eth", 1.0, future)
+    result = sw.cancel_timelock(tl["timelock_id"])
+    assert result["cancelled"] is True
+
+
+def test_cancel_timelock_not_found():
+    sw = _sw()
+    result = sw.cancel_timelock("nonexistent_id")
+    assert "error" in result
+
+
+def test_execute_due_timelocks_no_password():
+    sw = _sw()
+    with patch.dict(os.environ, {"WP_VAULT_PASSWORD": ""}):
+        from core.config import cfg as reloaded_cfg
+
+        reloaded_cfg._vault_password = ""
+        result = sw.execute_due_timelocks()
+    assert isinstance(result, list)
+    assert len(result) == 0
+
+
+def test_verify_claimant_signature_empty():
+    sw = _sw()
+    assert sw._verify_claimant_signature("w1", "", "eth") is False
+
+
+def test_verify_claimant_signature_valid():
+    sw = _sw()
+    assert sw._verify_claimant_signature("w1", "0xsig", "eth") is True
+
+
+def test_list_timelocks_empty():
+    sw = _sw()
+    locks = sw.list_timelocks()
+    assert isinstance(locks, list)
+
+
+def test_recovery_execution_error():
+    sw = _sw()
+    sw.setup_recovery("exec_err", ["0xA", "0xB"], threshold=2)
+    sigs = [_sig("0xA"), _sig("0xB")]
+    with (
+        patch.object(sw, "_verify_signature", return_value=True),
+        patch.object(sw, "_verify_claimant_signature", return_value=True),
+        patch.object(sw, "_execute_recovery", return_value={"error": "Wallet not found"}),
+    ):
+        result = sw.request_recovery(
+            "exec_err",
+            "0xNEW",
+            "eth",
+            sigs,
+            claimant_signature="0xVALID",
+        )
+    assert "error" in result

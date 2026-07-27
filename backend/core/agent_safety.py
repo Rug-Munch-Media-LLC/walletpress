@@ -443,7 +443,7 @@ def list_limits() -> dict:
     usage: dict[str, dict[str, float]] = {}
     for r in rows:
         usage.setdefault(r["chain"], {}).setdefault(r["period"], 0.0)
-        usage[r["chain"]][r["period"]] += r["amount"]
+        usage[r["chain"]][r["period"]] += r["amount_used"]
     return {"usage": usage}
 
 

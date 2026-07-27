@@ -15,7 +15,7 @@ Every session, every agent, every engineer:
 2. **Pick from the open work list** below. Don't pick from scratch — the list is the canonical "what's next."
 3. **Touch only what's assigned.** If you find a related bug, log it in AUDIT.md "Known issues" and move on. Don't fix it in this PR.
 4. **One logical change per PR.** Conventional commits. Tests in the same PR.
-5. **Push to Talos daily** (`git push talos main`). Hydra mirrors at 4 AM.
+5. **Push daily** (`git push origin main`). Multi-remote mirroring via script.
 6. **Update the docs in the same PR** if you change behavior. Docs drift is the #1 cause of agent misalignment.
 
 ---
@@ -297,25 +297,19 @@ backend/tests/
 
 ## Deployment workflow
 
-WalletPress doesn't ship from Cinnabox — it ships from Talos.
-
 ```bash
-# 1. Push to Talos
-cd ~/sites/walletpress
-git push talos main
+# 1. Push to the deploy host
+git push origin main
 
-# 2. SSH into Talos
-ssh netcup
-
-# 3. Update + restart on Talos
-cd /root/sites/walletpress  # or wherever it's deployed
+# 2. On the deploy host, pull, build, and restart
+cd /sites/walletpress
 git pull
 cd backend
-make test                    # run tests on Talos too
+make test
 docker compose -f docker-compose.yml build
 docker compose -f docker-compose.yml up -d
 
-# 4. Verify
+# 3. Verify
 curl -s http://localhost:8010/health
 ```
 
@@ -323,8 +317,7 @@ Tagging:
 
 ```bash
 git tag -a v1.0.0-audit -m "v1.0.0-audit: P0+P1 fixes"
-git push talos v1.0.0-audit
-git push origin v1.0.0-audit  # external mirror
+git push origin v1.0.0-audit
 ```
 
 ---

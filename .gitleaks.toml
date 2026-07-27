@@ -106,6 +106,9 @@ paths = [
   '''backend/core/webhooks\.py''',
   # Verify page HTML with embedded test mnemonic
   '''verify\.html''',
+  # Security scanner: rule definitions match private-repo-reference by design
+  '''scripts/enterprise-firewall\.py''',
+  '''scripts/proprietary-firewall\.py''',
 ]
 
 regexTarget = "line"

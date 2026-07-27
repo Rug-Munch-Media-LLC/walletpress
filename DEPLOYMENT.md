@@ -4,10 +4,10 @@
 
 ## Architecture
 - Container: Docker
-- Image registry: local (Talos)
-- Orchestration: docker-compose on Talos
-- Reverse proxy: nginx on Talos
-- Auto-deploy: forgejo webhook → Talos deploy script
+- Image registry: local/private
+- Orchestration: docker-compose
+- Reverse proxy: nginx
+- Auto-deploy: forgejo webhook → deploy script
 
 ## Deploy
 
@@ -22,12 +22,11 @@ On merge to `main`:
 
 ### Manual
 ```bash
-ssh netcup
+# On the deploy host
 cd /srv/walletpress
 git pull origin main
 docker build -t walletpress:latest .
-docker stop walletpress
-docker rm walletpress
+docker stop walletpress && docker rm walletpress
 docker run -d --name walletpress --restart unless-stopped --network host -p 8010:8010 walletpress:latest
 ```
 
@@ -38,7 +37,7 @@ curl -fsS http://localhost:8010/health
 
 ## Rollback
 ```bash
-ssh netcup
+# On the deploy host
 cd /srv/walletpress
 git log --oneline -5   # find last good commit
 git checkout <commit-hash>
@@ -53,23 +52,19 @@ docker logs walletpress --tail 100 -f
 
 ## Monitoring
 - Prometheus: `/metrics` endpoint
-- Grafana: dashboards in fleet-infra
+- Grafana: dashboards
 - Loki: log aggregation
 
 ## Secrets
-All secrets in gopass:
-- `rmi/walletpress/admin_key`
-- `rmi/walletpress/db_password`
-- _see AGENTS.md for full list_
+All secrets in gopass (see AGENTS.md for full list).
 
 Loaded via docker `--env-file` or systemd `EnvironmentFile`.
 
 ## Firewall
-- Public: 80, 443 (nginx)
-- Internal: 8010 (localhost only, behind nginx)
-- Tailscale: 8010 for admin access
+- Public ports: nginx
+- Internal: localhost only, behind nginx
 
 ## Backup
-- Code: forgejo (source of truth) + Hydra bare mirror (daily 04:00)
+- Code: forgejo (source of truth)
 - Data: DB snapshot to R2 (daily)
 - Config: gopass

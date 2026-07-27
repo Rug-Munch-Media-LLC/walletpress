@@ -98,7 +98,7 @@ Unstable / blocked:
 ## Quickstart (developer)
 
 ```bash
-git clone git@talos:/srv/git/walletpress.git
+git clone https://git.rugmunch.io/RugMunchMedia/walletpress.git
 cd walletpress
 make install      # cd backend && pip install -r requirements.txt
 cp backend/.env.example backend/.env
@@ -144,7 +144,7 @@ Then ask your agent: *"Generate 5 SOL wallets for the airdrop."* The agent uses 
 
 - **One repo per product.** RMI, Pry, WalletPress are separate repos with separate release cadences.
 - **Conventional commits.** `feat(scope):`, `fix(scope):`, `chore:`, `docs:`. Mandatory.
-- **Push to Talos** as primary (`git push talos main`). Hydra mirrors daily.
+- **Push** to forgejo as primary (`git push origin main`). Multi-remote mirroring via script.
 - **Tag releases** with `vX.Y.Z`. Pre-release: `-beta`, `-audit`, `-rcN`.
 - **No .env in git.** Use `gopass` for secrets.
 

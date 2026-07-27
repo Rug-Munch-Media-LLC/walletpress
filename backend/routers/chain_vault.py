@@ -23,9 +23,10 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from core.audit import get_audit
+from core.auth import get_key_store
 from core.config import cfg
 from core.vault import WalletEntry, get_vault
-from wallet_engine.chains import CHAIN_GROUPS, get_chains_for_tier
+from wallet_engine.chains import CHAIN_GROUPS, CHAINS, get_chains_for_tier
 from wallet_engine.generator import CryptoError, CryptoInputError, get_generator
 
 logger = logging.getLogger("wp.chain_vault")
@@ -343,3 +344,180 @@ async def delete_wallet(wallet_id: str, request: Request):
     if not vault.delete(wallet_id):
         raise HTTPException(status_code=404, detail="Wallet not found")
     return {"deleted": True, "wallet_id": wallet_id}
+
+
+@router.get("/stats")
+async def vault_stats():
+    """Get vault statistics: total wallets, encryption status, chain distribution."""
+    vault = get_vault()
+    stats = vault.stats()
+    return {
+        "vault": stats,
+        "encryption_enabled": cfg.vault_password is not None and len(cfg.vault_password) > 0,
+        "total_chains_supported": len(CHAINS),
+    }
+
+
+@router.get("/vault/{wallet_id}/full")
+async def get_wallet_full(wallet_id: str, request: Request):
+    """Get full wallet details including private key.
+
+    Requires admin API key. Private key is decrypted and returned.
+    Every full export is audited.
+    """
+    auth = request.headers.get("X-API-Key", "")
+    if not auth:
+        raise HTTPException(status_code=401, detail="API key required")
+    if auth != cfg.admin_key:
+        ks = get_key_store()
+        key_obj = ks.verify(auth)
+        if not key_obj:
+            raise HTTPException(status_code=403, detail="Invalid API key")
+        if "admin" not in key_obj.scopes and "wallet.admin" not in key_obj.scopes:
+            raise HTTPException(status_code=403, detail="Admin scope required for full key export")
+
+    vault = get_vault()
+    wallet = vault.get(wallet_id)
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    get_audit().log(
+        action="wallet.full_export",
+        actor=auth[:16] or "anonymous",
+        resource=wallet_id,
+    )
+
+    return {
+        "id": wallet.id,
+        "chain": wallet.chain,
+        "address": wallet.address,
+        "label": wallet.label,
+        "tags": wallet.tags,
+        "created_at": wallet.created_at,
+        "public_key": wallet.public_key,
+        "derivation_path": wallet.derivation_path,
+        "hd_path": wallet.hd_path,
+        "encrypted": wallet.encrypted,
+        "private_key_hex": wallet.encrypted_key if wallet.encrypted_key else "",
+        "mnemonic_encrypted": wallet.mnemonic_encrypted if wallet.mnemonic_encrypted else "",
+        "balance_usd": wallet.balance_usd,
+        "notes": wallet.notes,
+    }
+
+
+@router.get("/validate/{chain}/{address}")
+async def validate_address_endpoint(chain: str, address: str):
+    """Validate whether an address is valid for a given chain.
+
+    Uses the chain's address_pattern regex to validate format correctness.
+    This does NOT check if the address exists on-chain.
+    """
+    from wallet_engine.chains import validate_address as va
+
+    valid = va(chain, address)
+    return {
+        "valid": valid,
+        "chain": chain,
+        "address": address,
+        "note": "Format validation only — does not check on-chain existence",
+    }
+
+
+@router.get("/validate/all")
+async def validate_address_all(address: str = ""):
+    """Find all chains whose address pattern matches the given address."""
+    if not address:
+        raise HTTPException(status_code=400, detail="Address parameter required")
+    import re
+
+    possible = []
+    for key, chain in CHAINS.items():
+        if chain.address_pattern and re.match(chain.address_pattern, address):
+            possible.append(
+                {
+                    "chain": key,
+                    "name": chain.name,
+                    "family": chain.family.value,
+                }
+            )
+    return {
+        "address": address,
+        "possible_chains": possible,
+        "total_matches": len(possible),
+    }
+
+
+@router.get("/tree")
+async def wallet_tree(request: Request):
+    """Get wallets grouped by chain family."""
+    vault = get_vault()
+    wallets = vault.list(limit=10000)
+    tree: dict[str, list[dict]] = {}
+    for w in wallets:
+        chain_info = CHAINS.get(w.chain)
+        family = chain_info.family.value if chain_info else "unknown"
+        if family not in tree:
+            tree[family] = []
+        tree[family].append(
+            {
+                "id": w.id,
+                "chain": w.chain,
+                "address": w.address,
+                "label": w.label,
+                "created_at": w.created_at,
+                "encrypted": w.encrypted,
+            }
+        )
+    return {
+        "tree": tree,
+        "total_families": len(tree),
+        "total_wallets": len(wallets),
+    }
+
+
+@router.post("/api-keys")
+async def create_api_key(request: Request):
+    """Create a new API key."""
+    body = await request.json()
+    label = body.get("label", "default")
+    scopes = body.get("scopes", ["wallet.read"])
+    ks = get_key_store()
+    key_id, raw_key = ks.create(label=label, scopes=scopes)
+    return {"api_key_id": key_id, "api_key": raw_key, "label": label, "scopes": scopes}
+
+
+@router.get("/api-keys")
+async def list_api_keys():
+    """List all API keys (without exposing the raw keys)."""
+    ks = get_key_store()
+    return {"api_keys": ks.list()}
+
+
+class DeriveRequest(BaseModel):
+    mnemonic: str = Field(..., description="BIP39 mnemonic phrase")
+    chain: str = Field(..., description="Chain key (eth, sol, btc, etc.)")
+
+
+@router.post("/derive-address")
+async def derive_address(req: DeriveRequest):
+    """Derive address from mnemonic for a specific chain.
+
+    Deterministic — same mnemonic + chain always produces the same address.
+    Uses BIP39/BIP44 standard derivation.
+    """
+    generator = get_generator(cfg.vault_password)
+    try:
+        wallet = generator.generate(req.chain, mnemonic=req.mnemonic)
+        return {
+            "chain": wallet.chain,
+            "address": wallet.address,
+            "mnemonic": req.mnemonic,
+            "derivation_path": wallet.derivation_path
+            or CHAINS.get(req.chain, CHAINS["eth"]).hd_path,
+            "public_key": wallet.public_key_hex,
+            "created_at": wallet.created_at,
+        }
+    except CryptoError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Derivation failed: {e}")

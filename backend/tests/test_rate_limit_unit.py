@@ -1,12 +1,13 @@
 """Tests: token bucket rate limiter."""
 
 import os
+import tempfile
 import time
 
 os.environ["WP_VAULT_PASSWORD"] = "test-pw-rate"
-os.environ["WP_DATA_DIR"] = "/tmp/wp_test_rate"
+os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_rate_")
 
-from core.rate_limit import TokenBucket, RateLimitMiddleware
+from core.rate_limit import RateLimitMiddleware, TokenBucket
 
 
 class TestTokenBucket:
@@ -62,9 +63,9 @@ class TestRateLimitMiddleware:
 
     def test_get_key_fallback_to_ip(self):
         mw = RateLimitMiddleware(None)
-        req = _make_request(headers={}, client_host="10.0.0.1")
+        req = _make_request(headers={}, client_host="203.0.113.1")
         key = mw._get_key(req)
-        assert key == "ip:10.0.0.1"
+        assert key == "ip:203.0.113.1"
 
     def test_get_key_from_authorization(self):
         mw = RateLimitMiddleware(None)

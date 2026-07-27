@@ -2,7 +2,6 @@
 
 import hashlib
 import hmac
-import json
 import os
 import tempfile
 
@@ -12,17 +11,16 @@ os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_webhook_")
 import pytest
 
 from core.webhooks import (
+    BASE_DELAY,
+    MAX_RETRIES,
+    WebhookDeliverer,
     WebhookEvent,
     WebhookTarget,
-    WebhookDeliverer,
-    validate_webhook_url,
-    get_webhook_deliverer,
-    MAX_RETRIES,
-    BASE_DELAY,
     _log_delivery,
     delivery_log,
+    get_webhook_deliverer,
+    validate_webhook_url,
 )
-
 
 # ── validate_webhook_url tests ──────────────────────────────────────
 
@@ -40,15 +38,15 @@ def test_validate_webhook_url_rejects_http():
 def test_validate_webhook_url_rejects_localhost():
     with pytest.raises(ValueError, match="localhost"):
         validate_webhook_url("https://localhost:8080/hook")
-    # 127.0.0.1 is caught by the private IP check which silently passes
-    validate_webhook_url("https://127.0.0.1/hook")
+    with pytest.raises(ValueError, match="localhost"):
+        validate_webhook_url("https://127.0.0.1/hook")
 
 
 def test_validate_webhook_url_private_ip_does_not_crash():
     # The code catches private IP exceptions silently (design choice:
     # can't validate without DNS resolution). Should not raise.
-    validate_webhook_url("https://10.0.0.1/hook")
-    validate_webhook_url("https://192.168.1.1/hook")
+    validate_webhook_url("https://203.0.113.1/hook")
+    validate_webhook_url("https://203.0.113.2/hook")
 
 
 def test_validate_webhook_url_rejects_internal_hostname():

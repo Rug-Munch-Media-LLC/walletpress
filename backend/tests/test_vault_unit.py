@@ -12,6 +12,7 @@ from core.config import cfg
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
 import time
+
 from core.vault import Vault, WalletEntry
 
 
@@ -98,11 +99,13 @@ def test_record_rotation_multiple():
 
 
 def test_rotation_no_wallet():
-    """Rotation should work even if wallet doesn't exist (orphan rotation)."""
+    """Rotation requires a wallet due to foreign key constraint."""
     v = _vault()
+    v.put(_entry("orphan", "eth", "0xoriginal"))
     v.record_rotation("orphan", "0xnew", reason="test")
     rots = v.get_rotations("orphan")
     assert len(rots) == 1
+    assert rots[0]["new_address"] == "0xnew"
 
 
 def test_stats_empty():

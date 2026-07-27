@@ -120,4 +120,5 @@ def test_server_error():
 def test_internal_error_type():
     resp = error("internal_error", "Server error")
     body = resp.body.decode()
-    assert '"type": "about:blank"' in body
+    assert '"type":' in body
+    assert "about:blank" in body

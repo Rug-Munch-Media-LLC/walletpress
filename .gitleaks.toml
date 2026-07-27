@@ -104,6 +104,8 @@ paths = [
   '''ADDRESS_GENERATION\.md''',
   # Network code: RFC1918 CIDR range intentionally in IP blocking code
   '''backend/core/webhooks\.py''',
+  # Verify page HTML with embedded test mnemonic
+  '''verify\.html''',
 ]
 
 regexTarget = "line"

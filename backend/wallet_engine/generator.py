@@ -44,24 +44,10 @@ except ImportError:
     )
 
 try:
-    from ecdsa import SECP256k1  # noqa: F401  # noqa-ed: kept for re-export
-except ImportError:
-    raise RuntimeError(
-        "ecdsa is required. Install it: pip install ecdsa>=0.19.0"
-    )
-
-try:
     import base58
 except ImportError:
     raise RuntimeError(
         "base58 is required. Install it: pip install base58>=2.1.1"
-    )
-
-try:
-    import nacl  # noqa: F401  # imported for side effects (nacl.bindings)
-except ImportError:
-    raise RuntimeError(
-        "PyNaCl is required. Install it: pip install PyNaCl>=1.5.0"
     )
 
 try:
@@ -354,17 +340,11 @@ class WalletGenerator:
                 result = self._generate_ss58(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.COSMOS:
                 result = self._generate_secp256k1(chain, mnemonic, passphrase, effective_path)
-            elif chain.family == ChainFamily.ALGORAND:
-                result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
-            elif chain.family == ChainFamily.TEZOS:
+            elif chain.family == ChainFamily.ALGORAND or chain.family == ChainFamily.TEZOS:
                 result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.MONERO:
                 result = self._generate_monero(chain, mnemonic, passphrase, effective_path)
-            elif chain.family == ChainFamily.STELLAR:
-                result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
-            elif chain.family == ChainFamily.TON:
-                result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
-            elif chain.family == ChainFamily.NANO:
+            elif chain.family == ChainFamily.STELLAR or chain.family == ChainFamily.TON or chain.family == ChainFamily.NANO:
                 result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.FILECOIN:
                 result = self._generate_secp256k1(chain, mnemonic, passphrase, effective_path)
@@ -686,7 +666,7 @@ class WalletGenerator:
                 pay_xsk = pay_w.xprivate_key
                 stk_xsk = stk_w.xprivate_key
                 pay_priv = pay_xsk[:32].hex()
-                stk_xsk[:32].hex()
+                # stk_xsk[:32].hex()  # removed: unused computation
 
                 # Derive the public key from the raw signing key
                 from nacl.bindings import crypto_sign_seed_keypair

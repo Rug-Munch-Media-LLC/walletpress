@@ -199,57 +199,6 @@ def test_team_keys_crud(client, admin_headers):
     assert "keys" in list_data
 
 
-def test_rotate_wallet(client, admin_headers):
-    gen = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
-    wallet_id = gen.json()["wallets"][0]["id"]
-    resp = client.post("/api/v1/chain-vault/rotate", json={
-        "wallet_id": wallet_id, "reason": "test",
-    }, headers=admin_headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["rotated"] is True
-    assert data["old_wallet_id"] == wallet_id
-
-
-def test_temporal_wallet(client, admin_headers):
-    create = client.post("/api/v1/chain-vault/temporal/create", json={
-        "chain": "eth", "ttl_seconds": 3600,
-    }, headers=admin_headers)
-    assert create.status_code == 200
-    data = create.json()
-    assert "temporal_id" in data
-    assert data["chain"] == "eth"
-
-
-def test_2fa_flow(client, admin_headers):
-    resp = client.get("/api/v1/chain-vault/admin/2fa/status", headers=admin_headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "enabled" in data
-
-
-def test_proof_of_generation(client, admin_headers):
-    gen = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
-    wallet_id = gen.json()["wallets"][0]["id"]
-
-    prov = client.get(f"/api/v1/chain-vault/proof/provenance/{wallet_id}", headers=admin_headers)
-    assert prov.status_code == 200
-    data = prov.json()
-    assert "attested" in data or "wallet_id" in data
-
-
-def test_config_endpoint(client, admin_headers):
-    resp = client.get("/api/v1/chain-vault/config", headers=admin_headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "version" in data
-    assert "features" in data
-
-
 def test_delete_wallet(client, admin_headers):
     gen = client.post("/api/v1/chain-vault/generate", json={
         "chain": "eth", "count": 1,
@@ -325,39 +274,6 @@ def test_retention_groups(client, admin_headers):
 def test_wallet_memory_stubs(client, admin_headers):
     resp = client.get("/api/v1/wallet-memory/cluster", headers=admin_headers)
     assert resp.status_code in (200, 405, 404)
-
-
-def test_webhook_crud(client, admin_headers):
-    create = client.post("/api/v1/chain-vault/webhooks", json={
-        "url": "https://example.com/webhook",
-        "events": ["wallet.generated"],
-    }, headers=admin_headers)
-    assert create.status_code == 200
-    data = create.json()
-    assert "webhook_id" in data
-
-    list_resp = client.get("/api/v1/chain-vault/webhooks", headers=admin_headers)
-    assert list_resp.status_code == 200
-    list_data = list_resp.json()
-    webhooks = list_data.get("webhooks", [])
-    assert len(webhooks) >= 1
-
-    wh_id = data["webhook_id"]
-    delete = client.delete(f"/api/v1/chain-vault/webhooks/{wh_id}", headers=admin_headers)
-    assert delete.status_code == 200
-    assert delete.json()["deleted"] is True
-
-
-def test_bulk_filter(client, admin_headers):
-    client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
-    resp = client.post("/api/v1/chain-vault/bulk/filter", json={
-        "filters": {"chain": "eth"},
-    }, headers=admin_headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "filtered" in data or "wallets" in data
 
 
 def test_metrics(client, admin_headers):

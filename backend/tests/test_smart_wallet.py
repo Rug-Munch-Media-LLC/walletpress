@@ -392,13 +392,14 @@ def test_cancel_timelock_not_found():
 
 def test_execute_due_timelocks_no_password():
     sw = _sw()
-    with patch.dict(os.environ, {"WP_VAULT_PASSWORD": ""}):
-        from core.config import cfg as reloaded_cfg
-
-        reloaded_cfg._vault_password = ""
+    old_password = cfg._vault_password
+    cfg._vault_password = ""
+    try:
         result = sw.execute_due_timelocks()
-    assert isinstance(result, list)
-    assert len(result) == 0
+        assert isinstance(result, list)
+        assert len(result) == 0
+    finally:
+        cfg._vault_password = old_password
 
 
 def test_verify_claimant_signature_empty():

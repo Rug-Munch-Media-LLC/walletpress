@@ -133,7 +133,7 @@ jobs:
       - name: Run pytest with coverage
         run: |
           source .venv/bin/activate
-          pytest tests/ -x -q --tb=short --cov=walletpress --cov-report=xml:coverage.xml --cov-report=term --cov-fail-under=30
+          pytest tests/ -x -q --tb=short --cov=walletpress --cov-report=xml:coverage.xml --cov-report=term --cov-fail-under=39
       - name: Check coverage threshold
         run: |
           python -c "
@@ -142,8 +142,8 @@ jobs:
           root = tree.getroot()
           line_rate = float(root.attrib.get('line-rate', 0))
           print(f'Coverage: {line_rate*100:.1f}%')
-          if line_rate < 0.30:
-              print('❌ Coverage below 30% threshold')
+          if line_rate < 0.39:
+              print('❌ Coverage below 39% threshold')
               exit(1)
           print('✅ Coverage threshold met')
           "
@@ -164,6 +164,22 @@ jobs:
       - name: Build backend image
         run: |
           docker build -t walletpress-backend backend/ || echo "Docker build requires Docker daemon"
+
+  pip-audit:
+    runs-on: docker-x64
+    container:
+      image: python:3.12-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit + deps
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends gcc git ca-certificates curl
+          rm -rf /var/lib/apt/lists/*
+          pip install pip-audit
+          pip install -r backend/requirements.txt 2>/dev/null || true
+      - name: Run pip-audit (blocking on HIGH/CRITICAL)
+        run: |
+          pip-audit --fail-on=high --desc 2>&1 || { echo "❌ pip-audit found HIGH/CRITICAL vulnerabilities — fix before merge"; exit 1; }
 
   security:
     runs-on: docker-x64

@@ -30,10 +30,10 @@ import os
 import secrets
 import sqlite3
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from datetime import UTC, datetime
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -113,7 +113,7 @@ FREE_WALLETS = 3  # TODO: Free tier limit
 
 PAYMENT_ADDRESS = os.getenv("WP_PAYMENT_ADDRESS", "YOUR_PAYMENT_ADDRESS_HERE")
 PAYMENT_CHAIN = "solana"
-PAYMENT_TOKEN = "USDC"
+PAYMENT_TOKEN = "USDC"  # noqa: S105
 
 # ── Database ─────────────────────────────────────────────────────
 
@@ -170,14 +170,10 @@ def calc_price(count: int) -> float:
 
 
 async def verify_payment(chain: str, tx: str, expected: float) -> bool:
-    """Verify an on-chain payment.
+    """Verify an on-chain payment via the PayAI facilitator.
 
-    In production, implement real on-chain verification:
-    - Check the tx is confirmed on-chain
-    - Verify the amount matches expected
-    - Verify the recipient address matches PAYMENT_ADDRESS
-    - Verify the token is USDC (or your chosen token)
-    - Guard against replay attacks
+    Delegates to ``core.x402_verify.verify_usdc_payment()`` for multi-chain
+    USDC verification (Solana, Base, Polygon, Arbitrum, Ethereum).
 
     Returns True if payment is verified, False otherwise.
     """
@@ -185,10 +181,20 @@ async def verify_payment(chain: str, tx: str, expected: float) -> bool:
         return True
     if not tx:
         return False
-    # TODO: Implement real on-chain payment verification
-    # See core/x402_verify.py in the full production build
-    logger.warning("Payment verification not implemented — using placeholder")
-    return True
+    try:
+        from core.x402_verify import verify_usdc_payment
+
+        result = await verify_usdc_payment(chain, tx, expected)
+        if not result.get("verified", False):
+            logger.warning(f"Payment verification failed: {result.get('reason', 'unknown')}")
+            return False
+        return True
+    except ImportError:
+        logger.error("x402 verification module not available")
+        return False
+    except Exception as e:
+        logger.error(f"Payment verification error: {e}")
+        return False  # CONSERVATIVE: don't approve unverified payments
 
 
 # ── Endpoints ────────────────────────────────────────────────────
@@ -321,4 +327,4 @@ if __name__ == "__main__":
     async def _x402_health():
         return {"status": "ok", "service": "x402-marketplace", "version": "1.0.0"}
 
-    uvicorn.run("x402_service:app", host="0.0.0.0", port=int(os.getenv("WP_X402_PORT", "8011")))
+    uvicorn.run("x402_service:app", host="0.0.0.0", port=int(os.getenv("WP_X402_PORT", "8011")))  # noqa: S104

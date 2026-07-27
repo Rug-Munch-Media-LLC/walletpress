@@ -12,14 +12,12 @@ Wallet-as-a-service. Wallet engine, x402 service, chain vault, hosting. CLI for 
 `backend` · language=Python 3.12 + FastAPI
 
 ## Where It Lives
-- Source: `https://git.rugmunch.io/RugMunchMedia/walletpress`
-- Deployed: Docker on Talos (/srv/walletpress/)
-- Port: 8010
+- Source: `https://github.com/RugMunchMedia/walletpress`
 
 ## Built With
-- Standards: [git.rugmunch.io/RugMunchMedia/standards](https://git.rugmunch.io/RugMunchMedia/standards)
-- Toolchain: [TOOLCHAIN.md](https://git.rugmunch.io/RugMunchMedia/standards/raw/branch/main/TOOLCHAIN.md)
-- Conventions: [CONVENTIONS.md](https://git.rugmunch.io/RugMunchMedia/standards/raw/branch/main/CONVENTIONS.md)
+- Standards: [github.com/RugMunchMedia/standards](https://github.com/RugMunchMedia/standards)
+- Toolchain: [TOOLCHAIN.md](https://github.com/RugMunchMedia/standards/raw/main/TOOLCHAIN.md)
+- Conventions: [CONVENTIONS.md](https://github.com/RugMunchMedia/standards/raw/main/CONVENTIONS.md)
 
 ## Components
 - `app/`: FastAPI source (adapters, agent, cli, core, plugins, routers)
@@ -31,7 +29,7 @@ Wallet-as-a-service. Wallet engine, x402 service, chain vault, hosting. CLI for 
 ## 🚨 CRITICAL RULES
 
 1. **No nested repos.** Don't commit other complete project trees inside this one.
-2. **No secrets.** Never commit `.secrets/`, `.env`, `*.pem`, `*.key`, `*.crt`. Use gopass.
+2. **No secrets.** Never commit `.secrets/`, `.env`, `*.pem`, `*.key`, `*.crt`.
 3. **No data blobs.** Don't commit `*.zip`, `*.parquet`, model weights, sqlite files.
 4. **No broken files.** Shell heredoc accidents must be caught before commit.
 5. **No duplicate scaffolds.** If a `backend/` or `frontend/` subdir exists at root, it's either THE app or bloat.
@@ -65,13 +63,22 @@ See [ARCHITECTURE.md](ARCHITECTURE.md). Update it when components change.
 - Backup: TBD
 
 ## Related Repos
-See [standards/PRODUCTS.md](https://git.rugmunch.io/RugMunchMedia/standards/raw/branch/main/PRODUCTS.md).
+See [standards/PRODUCTS.md](https://github.com/RugMunchMedia/standards/raw/main/PRODUCTS.md).
+
+## Open-Core Protection
+
+This repo is BSL-licensed (free for non-production use). The code here
+demonstrates wallet management patterns — it is NOT the complete RugMunch
+production wallet infrastructure. The managed platform at rugmunch.io
+includes production key management, enterprise SSO/RBAC, and admin features.
+
+See [METHODOLOGY-PROTECTION.md](https://github.com/RugMunchMedia/standards/blob/main/METHODOLOGY-PROTECTION.md)
+for details on what information belongs in public vs private repos.
 
 ## Git Policy
 
-See the master Git Policy at /root/AGENTS.md. This repo:
+This repo:
 - Classification: OPEN SOURCE
-- Remotes: forgejo + codeberg + gitlab + radicle
-- Push: git push forgejo main && git push codeberg main && git push gitlab main && rad sync
+- Remotes: codeberg + github + gitlab + radicle (primary)
 - Commits: type(scope): description
 - Never commit: .env, secrets, internal IPs, security reports

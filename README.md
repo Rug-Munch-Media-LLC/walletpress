@@ -30,11 +30,18 @@ make ci             # full CI pipeline
 - [SECURITY.md](SECURITY.md) — security model
 - [DECISIONS.md](DECISIONS.md) — architecture decision records
 
+## Open-Core Model
+
+This repo follows the open-core model. Core wallet engine code is BSL-licensed
+(free for non-production use). The RugMunch managed platform at rugmunch.io
+includes enterprise wallet infrastructure, key management, and admin features.
+
+See [OPEN-CORE.md](OPEN-CORE.md) for details.
+
 ## Standards
 This repo follows Rug Munch Media LLC fleet standards:
-[git.rugmunch.io/RugMunchMedia/standards](https://git.rugmunch.io/RugMunchMedia/standards)
+[github.com/RugMunchMedia/standards](https://github.com/RugMunchMedia/standards)
 
 ## Repository
-- Source of truth: `https://git.rugmunch.io/RugMunchMedia/walletpress`
-- Mirrors: GitHub (LLC + personal), GitLab, HuggingFace
-- Backup: Hydra daily at 04:00 via `git-backup.sh`
+- Source of truth: `https://github.com/RugMunchMedia/walletpress`
+- Mirrors: Codeberg, GitLab, HuggingFace

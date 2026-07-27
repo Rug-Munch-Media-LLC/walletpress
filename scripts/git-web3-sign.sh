@@ -17,7 +17,7 @@ case "$CMD" in
         echo "  from your WalletPress vault."
         echo ""
         echo "  Step 1: Get a wallet ID from your vault:"
-        echo "    curl -H 'X-API-Key: \$(gopass show walletpress/admin-key)'"
+        echo "    curl -H 'X-API-Key: \$(YOUR_API_KEY)'"
         echo "      http://localhost:8010/api/v1/chain-vault/vault"
         echo ""
         echo "  Step 2: Configure git:"

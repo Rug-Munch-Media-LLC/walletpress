@@ -1,5 +1,6 @@
 """LangChain Adapter — Use WalletPress tools in LangChain agents."""
 from __future__ import annotations
+
 from langchain.tools import BaseTool
 
 
@@ -19,8 +20,8 @@ class WalletPressTool(BaseTool):
         return json.dumps(result, default=str)
 
     async def _arun(self, **kwargs) -> str:
-        import json
         import asyncio
+        import json
         if asyncio.iscoroutinefunction(self._fn):
             result = await self._fn(**kwargs)
         else:

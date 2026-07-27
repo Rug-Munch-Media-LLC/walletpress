@@ -1,6 +1,8 @@
 """CrewAI Adapter — Use WalletPress tools in CrewAI agents."""
 from __future__ import annotations
+
 from crewai.tools import BaseTool
+
 
 class WalletPressCrewTool(BaseTool):
     name: str = ""

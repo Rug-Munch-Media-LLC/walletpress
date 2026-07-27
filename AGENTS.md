@@ -16,8 +16,8 @@ Wallet-as-a-service. Wallet engine, x402 service, chain vault, hosting. CLI for 
 
 ## Built With
 - Standards: [github.com/RugMunchMedia/standards](https://github.com/RugMunchMedia/standards)
-- Toolchain: [TOOLCHAIN.md](https://github.com/RugMunchMedia/standards/raw/main/TOOLCHAIN.md)
-- Conventions: [CONVENTIONS.md](https://github.com/RugMunchMedia/standards/raw/main/CONVENTIONS.md)
+- Toolchain: See README.md for development toolchain
+- Conventions: See CONTRIBUTING.md for coding conventions
 
 ## Components
 - `app/`: FastAPI source (adapters, agent, cli, core, plugins, routers)
@@ -63,7 +63,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md). Update it when components change.
 - Backup: TBD
 
 ## Related Repos
-See [standards/PRODUCTS.md](https://github.com/RugMunchMedia/standards/raw/main/PRODUCTS.md).
+See the product documentation for available products and services.
 
 ## Open-Core Protection
 

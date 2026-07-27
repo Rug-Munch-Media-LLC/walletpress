@@ -39,31 +39,25 @@ logger = logging.getLogger("wp.generator")
 try:
     from coincurve import PrivateKey as CoinCurveKey
 except ImportError:
-    raise RuntimeError(
-        "coincurve is required. Install it: pip install coincurve>=18.0.0"
-    )
+    raise RuntimeError("coincurve is required. Install it: pip install coincurve>=18.0.0")
 
 try:
     import base58
 except ImportError:
-    raise RuntimeError(
-        "base58 is required. Install it: pip install base58>=2.1.1"
-    )
+    raise RuntimeError("base58 is required. Install it: pip install base58>=2.1.1")
 
 try:
+    from argon2.low_level import Type as _Argon2Type, hash_secret_raw as _argon2id_kdf
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 except ImportError:
     raise RuntimeError(
-        "cryptography is required. Install it: pip install cryptography>=42.0.0"
+        "cryptography and argon2-cffi are required. Install them: pip install cryptography>=42.0.0 argon2-cffi>=23.0.0"
     )
 
 try:
     from Crypto.Hash import keccak
 except ImportError:
-    raise RuntimeError(
-        "pycryptodome is required. Install it: pip install pycryptodome>=3.20.0"
-    )
+    raise RuntimeError("pycryptodome is required. Install it: pip install pycryptodome>=3.20.0")
 
 
 def _keccak256(data: bytes) -> bytes:
@@ -88,8 +82,6 @@ def _to_eip55_checksum(address: str) -> str:
     return "".join(result)
 
 
-
-
 class CryptoError(RuntimeError):
     """Crypto operation failed unexpectedly (internal error, not bad input)."""
 
@@ -100,10 +92,13 @@ class CryptoInputError(ValueError):
 
 def _crypto_log_error(logger, operation, context=None):
     import sys
+
     exc = sys.exc_info()[1]
     logger.error(
         "Crypto operation failed: %s | error=%s: %s | context=%s",
-        operation, type(exc).__name__, exc,
+        operation,
+        type(exc).__name__,
+        exc,
         context or {},
         exc_info=True,
     )
@@ -138,8 +133,7 @@ def validate_mnemonic(mnemonic: str) -> str:
         ) from e
     if not Bip39MnemonicValidator().IsValid(mnemonic):
         raise ValueError(
-            "Mnemonic phrase failed BIP39 checksum validation. "
-            "Check the word order and spelling."
+            "Mnemonic phrase failed BIP39 checksum validation. Check the word order and spelling."
         )
 
     return mnemonic
@@ -173,34 +167,34 @@ def _ensure_hardened_path(path: str) -> str:
 # }
 CHAIN_ADDRESS_OVERRIDES: dict[str, dict] = {
     # Cosmos family — secp256k1 keys, bech32 address with chain-specific HRP
-    "atom":  {"curve": "secp256k1", "address_family": "bech32", "hrp": "cosmos"},
-    "osmo":  {"curve": "secp256k1", "address_family": "bech32", "hrp": "osmo"},
-    "juno":  {"curve": "secp256k1", "address_family": "bech32", "hrp": "juno"},
-    "sei":   {"curve": "secp256k1", "address_family": "bech32", "hrp": "sei"},
-    "inj":   {"curve": "secp256k1", "address_family": "bech32", "hrp": "inj"},
+    "atom": {"curve": "secp256k1", "address_family": "bech32", "hrp": "cosmos"},
+    "osmo": {"curve": "secp256k1", "address_family": "bech32", "hrp": "osmo"},
+    "juno": {"curve": "secp256k1", "address_family": "bech32", "hrp": "juno"},
+    "sei": {"curve": "secp256k1", "address_family": "bech32", "hrp": "sei"},
+    "inj": {"curve": "secp256k1", "address_family": "bech32", "hrp": "inj"},
     "evmos": {"curve": "secp256k1", "address_family": "bech32", "hrp": "evmos"},
     # Stellar — ed25519
-    "xlm":   {"curve": "ed25519", "address_family": "stellar"},
+    "xlm": {"curve": "ed25519", "address_family": "stellar"},
     # XRP — secp256k1 with custom base58 alphabet
-    "xrp":   {"curve": "secp256k1", "address_family": "xrp"},
+    "xrp": {"curve": "secp256k1", "address_family": "xrp"},
     # Tezos — ed25519 with tz1 watermark
-    "xtz":   {"curve": "ed25519", "address_family": "tezos"},
+    "xtz": {"curve": "ed25519", "address_family": "tezos"},
     # TON — ed25519 with workchain + CRC16
-    "ton":   {"curve": "ed25519", "address_family": "ton"},
+    "ton": {"curve": "ed25519", "address_family": "ton"},
     # Filecoin — secp256k1 with f1 prefix
-    "fil":   {"curve": "secp256k1", "address_family": "filecoin"},
+    "fil": {"curve": "secp256k1", "address_family": "filecoin"},
     # Nano — ed25519 with custom format
-    "xno":   {"curve": "ed25519", "address_family": "nano"},
+    "xno": {"curve": "ed25519", "address_family": "nano"},
     # Algorand — ed25519 with SHA-512/256 checksum
-    "algo":  {"curve": "ed25519", "address_family": "algorand"},
+    "algo": {"curve": "ed25519", "address_family": "algorand"},
     # Monero — handled separately in _generate_monero (uses monero library)
     # Substrate (Polkadot/Kusama) — sr25519, handled separately
     # Bitcoin Cash — secp256k1 + cashaddr encoding
-    "bch":   {"curve": "secp256k1", "address_family": "bch"},
+    "bch": {"curve": "secp256k1", "address_family": "bch"},
     # Zcash transparent — secp256k1 with proper t-addr prefix (0x1C8)
-    "zec":   {"curve": "secp256k1", "address_family": "zcash_t"},
+    "zec": {"curve": "secp256k1", "address_family": "zcash_t"},
     # Cardano — Kholaw (BIP32-Ed25519) via pycardano
-    "ada":   {"curve": "ed25519_kholaw", "address_family": "cardano", "network": "mainnet"},
+    "ada": {"curve": "ed25519_kholaw", "address_family": "cardano", "network": "mainnet"},
 }
 
 
@@ -290,9 +284,15 @@ class WalletGenerator:
         self._vault_password = vault_password
         self._generation_count = 0
 
-    def generate(self, chain_key: str, mnemonic: str = "", passphrase: str = "",
-                 label: str = "", tags: list[str] | None = None,
-                 derivation_path: str = "") -> GeneratedWallet:
+    def generate(
+        self,
+        chain_key: str,
+        mnemonic: str = "",
+        passphrase: str = "",
+        label: str = "",
+        tags: list[str] | None = None,
+        derivation_path: str = "",
+    ) -> GeneratedWallet:
         """Generate a wallet for any supported chain.
 
         Args:
@@ -308,7 +308,9 @@ class WalletGenerator:
         """
         chain = CHAINS.get(chain_key.lower())
         if not chain:
-            raise CryptoInputError(f"Unsupported chain: {chain_key}. Supported: {list(CHAINS.keys())}")
+            raise CryptoInputError(
+                f"Unsupported chain: {chain_key}. Supported: {list(CHAINS.keys())}"
+            )
 
         if not mnemonic:
             mnemonic = self._generate_mnemonic()
@@ -344,7 +346,11 @@ class WalletGenerator:
                 result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.MONERO:
                 result = self._generate_monero(chain, mnemonic, passphrase, effective_path)
-            elif chain.family == ChainFamily.STELLAR or chain.family == ChainFamily.TON or chain.family == ChainFamily.NANO:
+            elif (
+                chain.family == ChainFamily.STELLAR
+                or chain.family == ChainFamily.TON
+                or chain.family == ChainFamily.NANO
+            ):
                 result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.FILECOIN:
                 result = self._generate_secp256k1(chain, mnemonic, passphrase, effective_path)
@@ -353,9 +359,7 @@ class WalletGenerator:
         except Exception as e:
             chain_info_str = f"{chain_key}/{chain.name}"
             _crypto_log_error(logger, "generate", {"chain": chain_info_str, "label": label})
-            raise CryptoError(
-                f"Wallet generation failed for {chain_info_str}: {e}"
-            ) from e
+            raise CryptoError(f"Wallet generation failed for {chain_info_str}: {e}") from e
 
         result.chain = chain_key
         result.chain_name = chain.name
@@ -380,7 +384,10 @@ class WalletGenerator:
     def _generate_mnemonic(self, strength: int = 256) -> str:
         try:
             from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
-            words_num = Bip39WordsNum.WORDS_NUM_24 if strength >= 256 else Bip39WordsNum.WORDS_NUM_12
+
+            words_num = (
+                Bip39WordsNum.WORDS_NUM_24 if strength >= 256 else Bip39WordsNum.WORDS_NUM_12
+            )
             # Always return a plain string (bip_utils sometimes returns a Bip39Mnemonic
             # object that downstream libraries like pycardano can't accept).
             return str(Bip39MnemonicGenerator().FromWordsNumber(words_num))
@@ -393,6 +400,7 @@ class WalletGenerator:
     def _seed_from_mnemonic(self, mnemonic: str, passphrase: str = "") -> bytes:
         try:
             from bip_utils import Bip39SeedGenerator
+
             return Bip39SeedGenerator(mnemonic).Generate(passphrase)
         except ImportError:
             raise
@@ -403,6 +411,7 @@ class WalletGenerator:
     def _derive_private_key(self, seed: bytes, path: str = "m/44'/60'/0'/0/0") -> str:
         try:
             from bip_utils import Bip32Secp256k1
+
             if path:
                 bip32 = Bip32Secp256k1.FromSeed(seed)
                 priv = bip32.DerivePath(path).PrivateKey().Raw().ToHex()
@@ -417,12 +426,16 @@ class WalletGenerator:
             _crypto_log_error(logger, "_derive_private_key", {"path": path})
             raise CryptoError(f"BIP32 key derivation failed: {e}") from e
 
-    def _derive_ed25519_key(self, seed: bytes, path: str = "m/44'/501'/0'/0'") -> tuple[bytes, bytes]:
+    def _derive_ed25519_key(
+        self, seed: bytes, path: str = "m/44'/501'/0'/0'"
+    ) -> tuple[bytes, bytes]:
         try:
             from bip_utils import Bip32Slip10Ed25519
+
             bip32 = Bip32Slip10Ed25519.FromSeed(seed)
             priv = bip32.DerivePath(_ensure_hardened_path(path)).PrivateKey().Raw().ToBytes()[:32]
             from nacl.bindings import crypto_sign_seed_keypair
+
             pk, sk = crypto_sign_seed_keypair(priv)
             return sk, pk
         except ImportError:
@@ -431,7 +444,9 @@ class WalletGenerator:
             _crypto_log_error(logger, "_derive_ed25519_key", {"path": path})
             raise CryptoError(f"Ed25519 key derivation failed: {e}") from e
 
-    def _generate_evm(self, chain: Any, mnemonic: str, passphrase: str = "", path: str = "") -> GeneratedWallet:
+    def _generate_evm(
+        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
+    ) -> GeneratedWallet:
         try:
             seed = self._seed_from_mnemonic(mnemonic, passphrase)
             effective_path = path or chain.hd_path or "m/44'/60'/0'/0/0"
@@ -442,7 +457,10 @@ class WalletGenerator:
 
             address = _to_eip55_checksum("0x" + _keccak256(pub).hex()[-40:])
             return GeneratedWallet(
-                chain="", chain_name="", symbol="", address=address,
+                chain="",
+                chain_name="",
+                symbol="",
+                address=address,
                 private_key_hex=priv_hex,
                 public_key_hex=pub.hex() if isinstance(pub, bytes) else pub,
                 derivation_path=effective_path,
@@ -453,7 +471,9 @@ class WalletGenerator:
             _crypto_log_error(logger, "_generate_evm", {"path": path})
             raise CryptoError(f"EVM wallet generation failed: {e}") from e
 
-    def _generate_secp256k1(self, chain: Any, mnemonic: str, passphrase: str = "", path: str = "") -> GeneratedWallet:
+    def _generate_secp256k1(
+        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
+    ) -> GeneratedWallet:
         try:
             seed = self._seed_from_mnemonic(mnemonic, passphrase)
             effective_path = path or chain.hd_path or "m/44'/0'/0'/0/0"
@@ -462,8 +482,15 @@ class WalletGenerator:
             pk = CoinCurveKey.from_hex(priv_hex)
             pub = pk.public_key.format(compressed=True)
 
-            prefix_map = {"btc": 0x00, "ltc": 0x30, "doge": 0x1E, "bch": 0x00,
-                          "dash": 0x4C, "zec": 0x1C, "xrp": 0x00}
+            prefix_map = {
+                "btc": 0x00,
+                "ltc": 0x30,
+                "doge": 0x1E,
+                "bch": 0x00,
+                "dash": 0x4C,
+                "zec": 0x1C,
+                "xrp": 0x00,
+            }
             prefix = prefix_map.get(chain.key, 0x00)
 
             sha = hashlib.sha256(pub).digest()
@@ -474,23 +501,33 @@ class WalletGenerator:
 
             if chain.family == ChainFamily.SECP256K1_ALT:
                 addr_type = "p2pkh-alt"
-            elif "segwit" in getattr(chain, 'key', ''):
+            elif "segwit" in getattr(chain, "key", ""):
                 addr_type = "segwit"
             else:
                 addr_type = "p2pkh"
 
             return GeneratedWallet(
-                chain="", chain_name="", symbol="", address=address,
-                private_key_hex=priv_hex, address_type=addr_type,
+                chain="",
+                chain_name="",
+                symbol="",
+                address=address,
+                private_key_hex=priv_hex,
+                address_type=addr_type,
                 derivation_path=effective_path,
             )
         except CryptoInputError:
             raise
         except Exception as e:
-            _crypto_log_error(logger, "_generate_secp256k1", {"chain": chain.key if hasattr(chain, 'key') else '?'})
+            _crypto_log_error(
+                logger,
+                "_generate_secp256k1",
+                {"chain": chain.key if hasattr(chain, "key") else "?"},
+            )
             raise CryptoError(f"SECP256k1 wallet generation failed: {e}") from e
 
-    def _generate_ed25519(self, chain: Any, mnemonic: str, passphrase: str = "", path: str = "") -> GeneratedWallet:
+    def _generate_ed25519(
+        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
+    ) -> GeneratedWallet:
         try:
             seed = self._seed_from_mnemonic(mnemonic, passphrase)
             effective_path = path or chain.hd_path or "m/44'/501'/0'/0'"
@@ -513,17 +550,26 @@ class WalletGenerator:
                 address = base58.b58encode(pub).decode()[:44]
 
             return GeneratedWallet(
-                chain="", chain_name="", symbol="", address=address,
-                private_key_hex=priv_hex, public_key_hex=pub.hex(),
-                address_type="ed25519", derivation_path=effective_path,
+                chain="",
+                chain_name="",
+                symbol="",
+                address=address,
+                private_key_hex=priv_hex,
+                public_key_hex=pub.hex(),
+                address_type="ed25519",
+                derivation_path=effective_path,
             )
         except CryptoInputError:
             raise
         except Exception as e:
-            _crypto_log_error(logger, "_generate_ed25519", {"chain": chain.key if hasattr(chain, 'key') else '?'})
+            _crypto_log_error(
+                logger, "_generate_ed25519", {"chain": chain.key if hasattr(chain, "key") else "?"}
+            )
             raise CryptoError(f"Ed25519 wallet generation failed: {e}") from e
 
-    def _generate_tron(self, chain: Any, mnemonic: str, passphrase: str = "", path: str = "") -> GeneratedWallet:
+    def _generate_tron(
+        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
+    ) -> GeneratedWallet:
         try:
             seed = self._seed_from_mnemonic(mnemonic, passphrase)
             effective_path = path or chain.hd_path or "m/44'/195'/0'/0/0"
@@ -533,14 +579,19 @@ class WalletGenerator:
             pub = pk.public_key.format(compressed=False)[1:]
 
             addr_hash = _keccak256(pub)[-20:]
-            addr_bytes = b'\x41' + addr_hash
+            addr_bytes = b"\x41" + addr_hash
             cs = hashlib.sha256(hashlib.sha256(addr_bytes).digest()).digest()[:4]
             address = base58.b58encode(addr_bytes + cs).decode()
 
             return GeneratedWallet(
-                chain="", chain_name="", symbol="TRX", address=address,
-                private_key_hex=priv_hex, public_key_hex=pub.hex(),
-                address_type="tron-base58", derivation_path=effective_path,
+                chain="",
+                chain_name="",
+                symbol="TRX",
+                address=address,
+                private_key_hex=priv_hex,
+                public_key_hex=pub.hex(),
+                address_type="tron-base58",
+                derivation_path=effective_path,
             )
         except CryptoInputError:
             raise
@@ -548,7 +599,9 @@ class WalletGenerator:
             _crypto_log_error(logger, "_generate_tron")
             raise CryptoError(f"TRON wallet generation failed: {e}") from e
 
-    def _generate_ripple(self, chain: Any, mnemonic: str, passphrase: str = "", path: str = "") -> GeneratedWallet:
+    def _generate_ripple(
+        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
+    ) -> GeneratedWallet:
         try:
             seed = self._seed_from_mnemonic(mnemonic, passphrase)
             effective_path = path or chain.hd_path or "m/44'/144'/0'/0/0"
@@ -558,14 +611,19 @@ class WalletGenerator:
 
             sha = hashlib.sha256(pub).digest()
             ripe = hashlib.new("ripemd160", sha).digest()
-            addr_bytes = b'\x7a' + ripe
+            addr_bytes = b"\x7a" + ripe
             cs = hashlib.sha256(hashlib.sha256(addr_bytes).digest()).digest()[:4]
             address = base58.b58encode(addr_bytes + cs).decode()
 
             return GeneratedWallet(
-                chain="", chain_name="", symbol="XRP", address=address,
-                private_key_hex=priv_hex, public_key_hex=pub.hex(),
-                address_type="ripple-base58", derivation_path=effective_path,
+                chain="",
+                chain_name="",
+                symbol="XRP",
+                address=address,
+                private_key_hex=priv_hex,
+                public_key_hex=pub.hex(),
+                address_type="ripple-base58",
+                derivation_path=effective_path,
             )
         except CryptoInputError:
             raise
@@ -573,7 +631,9 @@ class WalletGenerator:
             _crypto_log_error(logger, "_generate_ripple")
             raise CryptoError(f"Ripple wallet generation failed: {e}") from e
 
-    def _generate_ss58(self, chain: Any, mnemonic: str, passphrase: str = "", path: str = "") -> GeneratedWallet:
+    def _generate_ss58(
+        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
+    ) -> GeneratedWallet:
         try:
             seed = self._seed_from_mnemonic(mnemonic, passphrase)
             effective_path = path or chain.hd_path or "m/44'/354'/0'/0/0"
@@ -591,19 +651,29 @@ class WalletGenerator:
             address = base58.b58encode(payload + checksum).decode()
 
             return GeneratedWallet(
-                chain="", chain_name="", symbol=chain.symbol, address=address,
-                private_key_hex=priv_hex, public_key_hex=pub.hex(),
-                address_type="ss58", derivation_path=effective_path,
+                chain="",
+                chain_name="",
+                symbol=chain.symbol,
+                address=address,
+                private_key_hex=priv_hex,
+                public_key_hex=pub.hex(),
+                address_type="ss58",
+                derivation_path=effective_path,
             )
         except CryptoInputError:
             raise
         except Exception as e:
-            _crypto_log_error(logger, "_generate_ss58", {"chain": chain.key if hasattr(chain, 'key') else '?'})
+            _crypto_log_error(
+                logger, "_generate_ss58", {"chain": chain.key if hasattr(chain, "key") else "?"}
+            )
             raise CryptoError(f"SS58 wallet generation failed: {e}") from e
 
-    def _generate_monero(self, chain: Any, mnemonic: str, passphrase: str = "", path: str = "") -> GeneratedWallet:
+    def _generate_monero(
+        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
+    ) -> GeneratedWallet:
         try:
             from monero.seed import Seed as MoneroSeed
+
             # Monero uses its own 25-word mnemonic, not BIP39.
             # Derive a 256-bit seed from the BIP39 mnemonic so generation is
             # deterministic: same BIP39 phrase always produces the same XMR wallet.
@@ -617,7 +687,9 @@ class WalletGenerator:
             xmr_mnemonic = ms.phrase
 
             return GeneratedWallet(
-                chain="", chain_name="", symbol="XMR",
+                chain="",
+                chain_name="",
+                symbol="XMR",
                 address=addr,
                 private_key_hex=spend_sec + view_sec,
                 public_key_hex=spend_pub + view_pub,
@@ -635,8 +707,9 @@ class WalletGenerator:
             _crypto_log_error(logger, "_generate_monero")
             raise CryptoError(f"Monero wallet generation failed: {e}") from e
 
-    def _generate_with_override(self, chain: Any, mnemonic: str, passphrase: str,
-                                 path: str, chain_key: str) -> GeneratedWallet:
+    def _generate_with_override(
+        self, chain: Any, mnemonic: str, passphrase: str, path: str, chain_key: str
+    ) -> GeneratedWallet:
         """Generate a wallet using a chain-specific override from CHAIN_ADDRESS_OVERRIDES.
 
         This is the new path for the 17 chains that have non-trivial address
@@ -658,8 +731,13 @@ class WalletGenerator:
             # We extract the raw 32-byte ed25519 signing key from xsk[:32].
             if curve == "ed25519_kholaw":
                 from pycardano import HDWallet
+
                 wallet = HDWallet.from_mnemonic(mnemonic)
-                acc = wallet.derive(1852, hardened=True).derive(1815, hardened=True).derive(0, hardened=True)
+                acc = (
+                    wallet.derive(1852, hardened=True)
+                    .derive(1815, hardened=True)
+                    .derive(0, hardened=True)
+                )
                 pay_w = acc.derive(0).derive(0)
                 stk_w = acc.derive(2).derive(0)
                 # xsk format: 32-byte signing key || 32-byte chain code
@@ -670,6 +748,7 @@ class WalletGenerator:
 
                 # Derive the public key from the raw signing key
                 from nacl.bindings import crypto_sign_seed_keypair
+
                 pay_pub, _ = crypto_sign_seed_keypair(pay_xsk[:32])
                 stk_pub, _ = crypto_sign_seed_keypair(stk_xsk[:32])
 
@@ -679,7 +758,9 @@ class WalletGenerator:
                 # Return payment key as primary; stake key is in derivation_path note.
                 # The combined private key is the payment || stake (for full restoration).
                 return GeneratedWallet(
-                    chain="", chain_name="", symbol="",
+                    chain="",
+                    chain_name="",
+                    symbol="",
                     address=address,
                     private_key_hex=pay_priv,
                     public_key_hex=pay_pub.hex(),
@@ -692,17 +773,19 @@ class WalletGenerator:
             if curve == "secp256k1":
                 priv_hex = self._derive_private_key(seed, path)
                 from coincurve import PrivateKey
+
                 pk = PrivateKey.from_hex(priv_hex)
                 compressed_pub = pk.public_key.format(compressed=True)
                 privkey_bytes = bytes.fromhex(priv_hex)
             elif curve == "ed25519":
                 from bip_utils import Bip32Slip10Ed25519
+
                 bip32 = Bip32Slip10Ed25519.FromSeed(seed)
                 privkey_bytes = (
-                    bip32.DerivePath(_ensure_hardened_path(path))
-                    .PrivateKey().Raw().ToBytes()[:32]
+                    bip32.DerivePath(_ensure_hardened_path(path)).PrivateKey().Raw().ToBytes()[:32]
                 )
                 from nacl.bindings import crypto_sign_seed_keypair
+
                 pub_bytes, _ = crypto_sign_seed_keypair(privkey_bytes)
                 compressed_pub = pub_bytes  # not compressed for ed25519
                 priv_hex = privkey_bytes.hex()
@@ -725,7 +808,9 @@ class WalletGenerator:
                     address = encode_address(address_family, compressed_pub)
 
             return GeneratedWallet(
-                chain="", chain_name="", symbol="",
+                chain="",
+                chain_name="",
+                symbol="",
                 address=address,
                 private_key_hex=priv_hex,
                 public_key_hex=compressed_pub.hex(),
@@ -735,7 +820,11 @@ class WalletGenerator:
         except CryptoInputError:
             raise
         except Exception as e:
-            _crypto_log_error(logger, "_generate_with_override", {"chain_key": chain_key, "address_family": address_family})
+            _crypto_log_error(
+                logger,
+                "_generate_with_override",
+                {"chain_key": chain_key, "address_family": address_family},
+            )
             raise CryptoError(f"Override wallet generation failed for {chain_key}: {e}") from e
 
     def _encrypt_key(self, plaintext: str) -> str:
@@ -743,8 +832,15 @@ class WalletGenerator:
             return plaintext
         try:
             salt = secrets.token_bytes(16)
-            kdf = Argon2id(salt, 32, 3, 4, 65536)
-            key = kdf.derive(self._vault_password.encode())
+            key = _argon2id_kdf(
+                secret=self._vault_password.encode(),
+                salt=salt,
+                time_cost=3,
+                memory_cost=65536,
+                parallelism=4,
+                hash_len=32,
+                type=_Argon2Type.ID,
+            )
             aesgcm = AESGCM(key)
             nonce = secrets.token_bytes(12)
             ct = aesgcm.encrypt(nonce, plaintext.encode(), None)
@@ -759,8 +855,15 @@ class WalletGenerator:
         try:
             data = base64.b64decode(encrypted)
             salt, nonce, ct = data[:16], data[16:28], data[28:]
-            kdf = Argon2id(salt, 32, 3, 4, 65536)
-            key = kdf.derive(self._vault_password.encode())
+            key = _argon2id_kdf(
+                secret=self._vault_password.encode(),
+                salt=salt,
+                time_cost=3,
+                memory_cost=65536,
+                parallelism=4,
+                hash_len=32,
+                type=_Argon2Type.ID,
+            )
             aesgcm = AESGCM(key)
             return aesgcm.decrypt(nonce, ct, None).decode()
         except ValueError as e:
@@ -770,8 +873,9 @@ class WalletGenerator:
             _crypto_log_error(logger, "decrypt_key")
             raise CryptoError(f"Key decryption failed: {e}") from e
 
-    def import_from_private_key(self, chain_key: str, private_key_hex: str,
-                                label: str = "", tags: list[str] | None = None) -> GeneratedWallet:
+    def import_from_private_key(
+        self, chain_key: str, private_key_hex: str, label: str = "", tags: list[str] | None = None
+    ) -> GeneratedWallet:
         """Import an existing private key into a wallet.
 
         Validates that the key is a valid hex string of appropriate length
@@ -811,7 +915,9 @@ class WalletGenerator:
 
         try:
             wallet = GeneratedWallet(
-                chain=chain_key, chain_name=chain.name, symbol=chain.symbol,
+                chain=chain_key,
+                chain_name=chain.name,
+                symbol=chain.symbol,
                 address=f"imported:{chain_key}:{private_key_hex[-8:]}",
                 private_key_hex=private_key_hex,
                 label=label or f"imported_{chain_key}_{int(time.time())}",
@@ -837,8 +943,10 @@ class WalletGenerator:
             "chains_supported": len(CHAINS),
             "chain_families": len({c.family for c in CHAINS.values()}),
             "encryption_enabled": bool(self._vault_password),
-            "chains": {k: {"name": v.name, "symbol": v.symbol, "family": v.family.value}
-                       for k, v in CHAINS.items()},
+            "chains": {
+                k: {"name": v.name, "symbol": v.symbol, "family": v.family.value}
+                for k, v in CHAINS.items()
+            },
         }
 
 

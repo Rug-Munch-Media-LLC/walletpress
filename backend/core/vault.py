@@ -13,26 +13,27 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import queue
 import secrets
 import sqlite3
 import threading
 import time
-import queue
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from .config import cfg
 
 logger = logging.getLogger("wp.vault")
 
 try:
+    from argon2.low_level import Type as _Argon2Type, hash_secret_raw as _argon2id_kdf
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 except ImportError:
     raise RuntimeError(
-        "cryptography is required. Install it: pip install cryptography>=42.0.0"
+        "cryptography and argon2-cffi are required. Install them: pip install cryptography>=42.0.0 argon2-cffi>=23.0.0"
     )
 
 
@@ -79,7 +80,9 @@ class Vault:
         self._init_db()
 
     def _new_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path), timeout=self.BUSY_TIMEOUT / 1000, check_same_thread=False)
+        conn = sqlite3.connect(
+            str(self.db_path), timeout=self.BUSY_TIMEOUT / 1000, check_same_thread=False
+        )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=%d" % self.BUSY_TIMEOUT)
@@ -176,8 +179,15 @@ class Vault:
 
     def encrypt_key(self, plaintext: str) -> str:
         salt = secrets.token_bytes(16)
-        kdf = Argon2id(salt, 32, 3, 4, 65536)
-        key = kdf.derive(cfg.vault_password.encode())
+        key = _argon2id_kdf(
+            secret=cfg.vault_password.encode(),
+            salt=salt,
+            time_cost=3,
+            memory_cost=65536,
+            parallelism=4,
+            hash_len=32,
+            type=_Argon2Type.ID,
+        )
         aesgcm = AESGCM(key)
         nonce = secrets.token_bytes(12)
         ct = aesgcm.encrypt(nonce, plaintext.encode(), None)
@@ -186,8 +196,15 @@ class Vault:
     def decrypt_key(self, encrypted: str) -> str:
         data = base64.b64decode(encrypted)
         salt, nonce, ct = data[:16], data[16:28], data[28:]
-        kdf = Argon2id(salt, 32, 3, 4, 65536)
-        key = kdf.derive(cfg.vault_password.encode())
+        key = _argon2id_kdf(
+            secret=cfg.vault_password.encode(),
+            salt=salt,
+            time_cost=3,
+            memory_cost=65536,
+            parallelism=4,
+            hash_len=32,
+            type=_Argon2Type.ID,
+        )
         aesgcm = AESGCM(key)
         return aesgcm.decrypt(nonce, ct, None).decode()
 
@@ -207,12 +224,22 @@ class Vault:
                      encrypted, balance_usd, notes, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        wallet.id, wallet.chain, wallet.address, wallet.label,
-                        json.dumps(wallet.tags), wallet.group, wallet.created_at or time.time(),
-                        wallet.encrypted_key, wallet.public_key,
-                        wallet.derivation_path, wallet.hd_path,
-                        wallet.mnemonic_encrypted, int(wallet.encrypted),
-                        wallet.balance_usd, wallet.notes, time.time(),
+                        wallet.id,
+                        wallet.chain,
+                        wallet.address,
+                        wallet.label,
+                        json.dumps(wallet.tags),
+                        wallet.group,
+                        wallet.created_at or time.time(),
+                        wallet.encrypted_key,
+                        wallet.public_key,
+                        wallet.derivation_path,
+                        wallet.hd_path,
+                        wallet.mnemonic_encrypted,
+                        int(wallet.encrypted),
+                        wallet.balance_usd,
+                        wallet.notes,
+                        time.time(),
                     ),
                 )
                 conn.commit()
@@ -285,7 +312,9 @@ class Vault:
     def count(self, chain: str = "") -> int:
         with self._conn() as conn:
             if chain:
-                return conn.execute("SELECT COUNT(*) FROM wallets WHERE chain = ?", (chain,)).fetchone()[0]
+                return conn.execute(
+                    "SELECT COUNT(*) FROM wallets WHERE chain = ?", (chain,)
+                ).fetchone()[0]
             return conn.execute("SELECT COUNT(*) FROM wallets").fetchone()[0]
 
     def record_rotation(self, wallet_id: str, new_address: str, reason: str = ""):
@@ -310,14 +339,16 @@ class Vault:
             by_chain = conn.execute(
                 "SELECT chain, COUNT(*) as count FROM wallets GROUP BY chain ORDER BY count DESC"
             ).fetchall()
-            encrypted = conn.execute("SELECT COUNT(*) FROM wallets WHERE encrypted = 1").fetchone()[0]
+            encrypted = conn.execute("SELECT COUNT(*) FROM wallets WHERE encrypted = 1").fetchone()[
+                0
+            ]
             return {
                 "total_wallets": total,
                 "encrypted_wallets": encrypted,
                 "chains_used": len(by_chain),
                 "by_chain": {r["chain"]: r["count"] for r in by_chain},
                 "rotations": conn.execute("SELECT COUNT(*) FROM rotations").fetchone()[0],
-        }
+            }
 
     def _row_to_entry(self, row) -> WalletEntry:
         def _g(key: str, default=""):
@@ -326,6 +357,7 @@ class Vault:
                 return val if val is not None else default
             except (KeyError, IndexError, TypeError):
                 return default
+
         return WalletEntry(
             id=_g("id"),
             chain=_g("chain"),

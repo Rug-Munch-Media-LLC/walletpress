@@ -53,11 +53,7 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-# We tolerate E402 (intentional imports for circular-dep avoidance in
-# mcp_server, main.py, routers/airdrop.py, tests/) and E702 (one-line
-# multi-statement idioms in plugins/defi.py for compact React-style code).
-# F821 false-positives are tracked separately; the cli/verify_receipt.py
-# one is intentional (parameter shadowing).
+select = ["E", "F", "I", "N", "W", "B", "A", "C4", "SIM", "UP", "RUF", "S"]
 extend-ignore = [
     "E402",
     "E702",
@@ -75,3 +71,58 @@ extend-ignore = [
 "plugins/__init__.py" = ["F401"]
 # cli/verify_receipt.py — timestamp is a function parameter (F821 false positive)
 "cli/verify_receipt.py" = ["F821"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
+exclude = [
+    "build/",
+    "dist/",
+    ".git/",
+    "__pycache__/",
+    ".venv/",
+]
+warn_unused_ignores = false
+# WalletPress was built without strict typing; enable incrementally.
+disable_error_code = [
+    "arg-type",
+    "attr-defined",
+    "assignment",
+    "call-arg",
+    "dict-item",
+    "index",
+    "list-item",
+    "return-value",
+    "union-attr",
+    "no-untyped-call",
+    "no-untyped-def",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "coincurve",
+    "coincurve.*",
+    "ecdsa",
+    "ecdsa.*",
+    "base58",
+    "base58.*",
+    "nacl",
+    "nacl.*",
+    "cryptography",
+    "cryptography.*",
+    "bip_utils",
+    "bip_utils.*",
+    "apscheduler",
+    "apscheduler.*",
+    "bech32",
+    "stellar_sdk",
+    "stellar_sdk.*",
+    "xrpl",
+    "xrpl.*",
+    "tonsdk",
+    "bitcash",
+    "monero",
+    "substrate-interface",
+]
+ignore_missing_imports = true

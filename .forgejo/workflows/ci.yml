@@ -72,16 +72,24 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install system deps
         run: |
-          apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+          apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
           rm -rf /var/lib/apt/lists/*
-      - name: Install ruff
-        run: pip install ruff
-      - name: Ruff check
-        run: ruff check backend/ cli/ --exit-non-zero-on-fix || echo "Ruff lint issues found (non-blocking)"
-        continue-on-error: true
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Setup Python
+        run: |
+          uv python install 3.11
+          uv venv --python 3.11 .venv
+      - name: Install dependencies
+        run: |
+          uv pip install --python .venv/bin/python ruff
+      - name: Ruff check (blocking)
+        run: source .venv/bin/activate && ruff check backend/ cli/ --exit-non-zero-on-fix
       - name: Ruff format check
-        run: ruff format --check backend/ cli/ || echo "Ruff format issues found (non-blocking)"
         continue-on-error: true
+        run: source .venv/bin/activate && ruff format --check backend/ cli/
 
   typecheck:
     runs-on: docker-x64
@@ -97,9 +105,9 @@ jobs:
           apt-get update && apt-get install -y --no-install-recommends git ca-certificates
           rm -rf /var/lib/apt/lists/*
           pip install mypy -e ".[dev]" 2>/dev/null || pip install mypy
-      - name: MyPy type check (non-blocking)
+      - name: MyPy type check (non-strict, non-blocking)
         run: |
-          mypy . --strict --ignore-missing-imports --no-incremental 2>&1 | tail -20 || echo "Mypy issues found (non-blocking)"
+          mypy . --ignore-missing-imports 2>&1 | tail -20 || echo "Mypy issues found (non-blocking)"
         continue-on-error: true
 
   test:
@@ -111,15 +119,34 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
-      - name: Install deps
+      - name: Install uv
         run: |
-          apt-get update && apt-get install -y --no-install-recommends gcc git ca-certificates
+          apt-get update && apt-get install -y --no-install-recommends gcc git ca-certificates curl
           rm -rf /var/lib/apt/lists/*
-          pip install -e ".[dev]" 2>/dev/null || pip install .
-      - name: Run pytest with coverage
-        continue-on-error: true
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Setup Python + deps
         run: |
-          pytest tests/ -x -q --tb=short --cov=walletpress --cov-report=xml:coverage.xml --cov-report=term 2>&1 || echo "Tests have known failures (non-blocking)"
+          uv python install 3.11
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv/bin/python -e ".[dev]"
+      - name: Run pytest with coverage
+        run: |
+          source .venv/bin/activate
+          pytest tests/ -x -q --tb=short --cov=walletpress --cov-report=xml:coverage.xml --cov-report=term --cov-fail-under=30
+      - name: Check coverage threshold
+        run: |
+          python -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          line_rate = float(root.attrib.get('line-rate', 0))
+          print(f'Coverage: {line_rate*100:.1f}%')
+          if line_rate < 0.30:
+              print('❌ Coverage below 30% threshold')
+              exit(1)
+          print('✅ Coverage threshold met')
+          "
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         continue-on-error: true
@@ -170,3 +197,13 @@ jobs:
           name: bandit-report
           path: bandit-report.json
         if: always()
+
+  shellcheck:
+    runs-on: docker-x64
+    container:
+      image: koalaman/shellcheck-alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck all shell scripts
+        run: |
+          find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/.venv/*" -exec shellcheck -x {} +

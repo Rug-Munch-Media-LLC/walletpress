@@ -1,8 +1,7 @@
 """Wallet Analysis Router — balance checking, risk scoring, transaction history.
 
-These endpoints connect to public RPC endpoints and blockchain explorers
-to provide read-only wallet analysis. NO private keys are ever required
-for these operations — they're purely public data lookups.
+These endpoints connect to public RPC endpoints, blockchain explorers,
+and the RMI Intelligence scanner for comprehensive wallet risk assessment.
 
 Trust: All data comes from public blockchains. We don't fabricate results.
 """
@@ -10,7 +9,9 @@ Trust: All data comes from public blockchains. We don't fabricate results.
 from __future__ import annotations
 
 import logging
+import os
 
+import httpx
 from fastapi import APIRouter, HTTPException
 
 from wallet_engine.chains import CHAINS, validate_address
@@ -38,6 +39,7 @@ async def get_balance(address: str, chain: str = "solana"):
         raise HTTPException(status_code=400, detail="Invalid address format")
 
     from .balance_fetcher import fetch_balance
+
     try:
         result = await fetch_balance(chain, address)
         return {
@@ -101,17 +103,56 @@ async def analyze_wallet(address: str, chain: str = "solana"):
 async def scan_wallet(address: str, chain: str = "solana", tier: str = "free"):
     """Deep scan a wallet for rug pull and scam indicators.
 
-    This endpoint integrates with RugMunch Intelligence's scanner
-    for comprehensive wallet risk assessment. Only available on
-    Pro and Enterprise tiers.
+    Delegates to RMI Intelligence's scanner for comprehensive
+    wallet risk assessment. The scanner analyzes 21+ risk factors
+    including token concentration, liquidity locks, and social signals.
 
     Trust: Scan results come from the same engine that powers
-    rugmunch.io. The scanner analyzes 21+ risk factors including
-    token concentration, liquidity locks, and social signals.
+    rugmunch.io. If the RMI scanner is unreachable, returns a
+    graceful degradation with an explanatory note.
     """
     chain_info = CHAINS.get(chain.lower())
     if not chain_info:
         raise HTTPException(status_code=400, detail=f"Unsupported chain: {chain}")
+
+    if not validate_address(chain, address):
+        raise HTTPException(status_code=400, detail="Invalid address format")
+
+    rmi_backend_url = os.getenv("RMI_BACKEND_URL", "http://rmi-backend:8000")
+    rmi_api_key = os.getenv("RMI_API_KEY", "")
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            headers = {}
+            if rmi_api_key:
+                headers["X-API-Key"] = rmi_api_key
+            resp = await client.post(
+                f"{rmi_backend_url}/api/v1/scanner/scan-wallet",
+                json={
+                    "chain": chain,
+                    "address": address,
+                    "depth": "standard" if tier == "pro" else "quick",
+                },
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "address": address,
+                    "chain": chain,
+                    "scan_tier": tier,
+                    "risk_assessment": {
+                        "overall_risk": _risk_tier(data.get("risk_score", 0)),
+                        "score": data.get("risk_score", 0),
+                        "factors": data.get("risk_factors", []),
+                        "token_security": {},
+                        "wallet_age": None,
+                        "associated_scams": [],
+                    },
+                    "rmi_scan_id": data.get("scan_id", ""),
+                }
+    except Exception as e:
+        logger.warning("RMI scanner call failed: %s", e)
 
     return {
         "address": address,
@@ -119,14 +160,23 @@ async def scan_wallet(address: str, chain: str = "solana", tier: str = "free"):
         "scan_tier": tier,
         "risk_assessment": {
             "overall_risk": "unknown",
-            "factors": [],
+            "factors": ["RMI scanner unavailable — check connection"],
             "token_security": {},
             "wallet_age": None,
             "associated_scams": [],
         },
-        "upgrade_tier": "Pro required for deep scanning",
-        "note": "Enable RMI scanner integration for full results.",
+        "note": "RMI scanner unreachable — check rmi-backend connection.",
     }
+
+
+def _risk_tier(score: int) -> str:
+    if score >= 70:
+        return "high"
+    if score >= 40:
+        return "medium"
+    if score > 0:
+        return "low"
+    return "unknown"
 
 
 @router.post("/verify")

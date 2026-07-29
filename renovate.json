@@ -1,50 +1,20 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":pinDigest"],
-  "schedule": ["before 4am on Monday"],
-  "labels": ["dependencies"],
-  "assignees": ["cryptorugmunch"],
-  "dependencyDashboard": true,
-  "dependencyDashboardTitle": "Dependency Dashboard",
-  "prConcurrentLimit": 5,
-  "prHourlyLimit": 2,
-  "rangeStrategy": "bump",
-  "vulnerabilityAlerts": {
-    "enabled": true,
-    "labels": ["security"]
-  },
-  "osvVulnerabilityAlerts": true,
-  "packageRules": [
-    {
-      "matchUpdateTypes": ["patch"],
-      "matchCurrentVersion": "!/^0/",
-      "automerge": true,
-      "automergeType": "branch",
-      "platformAutomerge": true
-    },
-    {
-      "matchDepTypes": ["devDependencies"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true,
-      "automergeType": "branch"
-    },
-    {
-      "matchManagers": ["pip_requirements", "pip_setup", "pip"],
-      "groupName": "Python pip dependencies",
-      "groupSlug": "python-pip"
-    },
-    {
-      "matchManagers": ["npm"],
-      "groupName": "JavaScript npm dependencies",
-      "groupSlug": "js-npm"
-    },
-    {
-      "matchCategories": ["python"],
-      "addLabels": ["python"]
-    },
-    {
-      "matchCategories": ["js"],
-      "addLabels": ["javascript"]
-    }
-  ]
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"description": "walletpress — extends RugMunch shared preset with pip/npm manager groups",
+	"extends": ["local>RugMunchMedia/standards:renovate-presets/rugmunch.json"],
+	"assignees": ["cryptorugmunch"],
+	"packageRules": [
+		{
+			"description": "Group all Python pip dependencies",
+			"matchManagers": ["pip_requirements", "pip_setup", "pip"],
+			"groupName": "Python pip dependencies",
+			"groupSlug": "python-pip"
+		},
+		{
+			"description": "Group all JavaScript npm dependencies",
+			"matchManagers": ["npm"],
+			"groupName": "JavaScript npm dependencies",
+			"groupSlug": "js-npm"
+		}
+	]
 }

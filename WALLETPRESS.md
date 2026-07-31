@@ -97,11 +97,17 @@ In `.opencode/opencode.jsonc` or equivalent:
   "mcpServers": {
     "walletpress": {
       "url": "http://localhost:8010/mcp/sse",
+      "headers": { "X-Admin-Key": "..." },
       "env": { "WP_API_KEY": "wp_..." }
     }
   }
 }
 ```
+
+> **Security note:** every `/mcp` route requires the `WP_ADMIN_KEY` admin key
+> (sent as `X-Admin-Key`, `Authorization: Bearer`, or `X-API-Key` header).
+> The MCP server can decrypt private keys and sweep wallets — do not expose
+> it without the admin key.
 
 ---
 

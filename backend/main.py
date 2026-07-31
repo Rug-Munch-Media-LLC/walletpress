@@ -18,6 +18,7 @@ password is configurable and NEVER logged.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -25,30 +26,37 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from datetime import UTC, datetime
-
-from core.audit import get_audit
-from core.auth import get_key_store
-from core.config import cfg
-from core.rate_limit import RateLimitMiddleware
-from core.webhooks import get_webhook_deliverer
-from core.ip_allowlist import IPAllowlistMiddleware
-from core.license_check import LicenseMiddleware
-from core.jwt_auth import JWTValidationMiddleware
-from routers import chain_vault, wallet_admin, wallet_analysis, wallet_memory, test_vectors, metrics as metrics_router
-from routers import airdrop as airdrop_router, health_monitor as health_router
-from routers import hosting as hosting_router, license_router as license_router
-from routers import retention as retention_router
-from x402_service import app as x402_app
 
 # AI Wallet Agent
 from agent.mcp_server import mcp as agent_mcp
 from agent.scheduler import scheduler as agent_scheduler
-
+from core.audit import get_audit
+from core.auth import get_key_store
+from core.config import cfg
+from core.ip_allowlist import IPAllowlistMiddleware
+from core.jwt_auth import JWTValidationMiddleware
+from core.license_check import LicenseMiddleware
+from core.rate_limit import RateLimitMiddleware
+from core.webhooks import get_webhook_deliverer
+from routers import (
+    airdrop as airdrop_router,
+    chain_vault,
+    health_monitor as health_router,
+    hosting as hosting_router,
+    license_router as license_router,
+    metrics as metrics_router,
+    retention as retention_router,
+    test_vectors,
+    wallet_admin,
+    wallet_analysis,
+    wallet_memory,
+)
+from x402_service import app as x402_app
 
 logger = logging.getLogger("wp")
 
@@ -88,32 +96,41 @@ async def lifespan(app: FastAPI):
     if not cfg.admin_key:
         raise RuntimeError("WP_ADMIN_KEY is required. Set it in the environment before starting.")
     if not cfg._vault_password:
-        raise RuntimeError("WP_VAULT_PASSWORD is required. Set it in the environment before starting.")
+        raise RuntimeError(
+            "WP_VAULT_PASSWORD is required. Set it in the environment before starting."
+        )
 
     os.makedirs(cfg.data_dir, exist_ok=True)
 
     # Print AI provider table on startup
     from agent.providers import list_providers
+
     for line in list_providers().split("\n"):
         logger.info(line)
 
     # Log referral revenue status
-    from plugins.defi import REVENUE_MODE, REF_JUPITER_WALLET, REF_HYPERLIQUID_WALLET
+    from plugins.defi import REF_HYPERLIQUID_WALLET, REF_JUPITER_WALLET, REVENUE_MODE
+
     jup_ok = bool(REF_JUPITER_WALLET)
     hl_ok = bool(REF_HYPERLIQUID_WALLET)
-    logger.info(f"Revenue mode: {REVENUE_MODE.upper()} | Jupiter: {'READY (50bps)' if jup_ok else 'NEEDS SETUP'} | Hyperliquid: {'READY (builder code)' if hl_ok else 'NEEDS SETUP'}")
+    logger.info(
+        f"Revenue mode: {REVENUE_MODE.upper()} | Jupiter: {'READY (50bps)' if jup_ok else 'NEEDS SETUP'} | Hyperliquid: {'READY (builder code)' if hl_ok else 'NEEDS SETUP'}"
+    )
     if REVENUE_MODE == "freemium":
-        logger.info("Revenue: Jupiter 50bps (set WP_REF_JUPITER_WALLET) + Hyperliquid builder fees (set WP_REF_HYPERLIQUID_WALLET, needs 100 USDC perps)")
+        logger.info(
+            "Revenue: Jupiter 50bps (set WP_REF_JUPITER_WALLET) + Hyperliquid builder fees (set WP_REF_HYPERLIQUID_WALLET, needs 100 USDC perps)"
+        )
     else:
         logger.info("Self-referral mode: you keep 100% of platform revenue.")
 
     # Initialize services into app.state (enables DI and testability)
-    from core.vault import Vault
-    from core.auth import KeyStore
     from core.audit import AuditLog
+    from core.auth import KeyStore
     from core.license import LicenseManager
     from core.proof import ProofOfGeneration
+    from core.vault import Vault
     from wallet_engine.generator import WalletGenerator
+
     app.state.vault = Vault(cfg.db_path)
     app.state.key_store = KeyStore(cfg.keys_path)
     app.state.audit = AuditLog(cfg.audit_path)
@@ -125,19 +142,24 @@ async def lifespan(app: FastAPI):
 
     # Reload persisted webhooks into the live deliverer
     from routers._persistent_store import PersistentStore
+
     PersistentStore.reload_webhooks()
 
     # Anchor source commit to Arweave for on-chain code verification
     if os.getenv("WP_POF_ARWEAVE_KEY_PATH"):
         from core.proof import anchor_source_commit
+
         result = anchor_source_commit()
         if result.get("anchored"):
-            logger.info(f"Source commit anchored: {result['commit'][:16]}... tx={result.get('tx_id', '')}")
+            logger.info(
+                f"Source commit anchored: {result['commit'][:16]}... tx={result.get('tx_id', '')}"
+            )
         else:
             logger.warning(f"Source commit anchoring skipped: {result.get('reason', 'unknown')}")
 
     # Background tasks
     import asyncio
+
     # Start AI Agent background scheduler (DCA, monitoring, rotations)
     agent_scheduler.start()
     logger.info("AI Wallet Agent scheduler started")
@@ -153,6 +175,7 @@ async def lifespan(app: FastAPI):
         while True:
             try:
                 from core.proof import get_proof
+
                 proof = get_proof()
                 root_hash, count = proof.compute_merkle_root()
                 if root_hash:
@@ -162,21 +185,26 @@ async def lifespan(app: FastAPI):
                     elif os.getenv("WP_POF_ETH_RPC") and os.getenv("WP_POF_ETH_PRIVATE_KEY"):
                         chain = "ethereum"
                     proof.commit(root_hash, count, commitment_chain=chain)
-                    logger.info(f"Auto-committed {count} attestations to {chain}: {root_hash[:16]}...")
+                    logger.info(
+                        f"Auto-committed {count} attestations to {chain}: {root_hash[:16]}..."
+                    )
             except Exception as e:
                 logger.error(f"Proof auto-commit failed: {e}")
             await asyncio.sleep(interval)
-    asyncio.ensure_future(proof_auto_commit_loop())
+
+    app.state.proof_commit_task = asyncio.ensure_future(proof_auto_commit_loop())
 
     async def temporal_cleanup_loop():
         while True:
             await asyncio.sleep(60)
             try:
                 from routers.chain_vault import _cleanup_expired_temporals
+
                 _cleanup_expired_temporals()
-            except Exception:
-                pass
-    asyncio.ensure_future(temporal_cleanup_loop())
+            except Exception as e:
+                logger.error(f"Temporal cleanup failed: {e}")
+
+    app.state.temporal_cleanup_task = asyncio.ensure_future(temporal_cleanup_loop())
 
     yield
 
@@ -195,6 +223,7 @@ app = FastAPI(
 
 # ── Structured JSON logging (structlog) ─────────────────────────
 from core.structured_logging import setup_logging as _setup_logging
+
 _setup_logging(os.getenv("WP_LOG_LEVEL", "INFO"))
 
 app.add_middleware(RequestIDMiddleware)
@@ -213,10 +242,11 @@ if cfg.rate_limit_per_minute > 0:
 
 app.add_middleware(metrics_router.MetricsMiddleware)
 
+
 @app.middleware("http")
 async def enforce_json_content_type(request: Request, call_next):
     """PEN-TEST: Reject non-JSON Content-Type on write endpoints.
-    
+
     POST/PUT/PATCH/DELETE must use application/json (file uploads via multipart exempted).
     Prevents content-type smuggling and bypass of JSON validation.
     """
@@ -225,7 +255,11 @@ async def enforce_json_content_type(request: Request, call_next):
         exempt = ("/health", "/docs", "/openapi.json", "/metrics", "/mcp/", "/ws/")
         if not path.startswith(exempt):
             ct = (request.headers.get("content-type") or "").lower().strip()
-            if ct and not ct.startswith("application/json") and not ct.startswith("multipart/form-data"):
+            if (
+                ct
+                and not ct.startswith("application/json")
+                and not ct.startswith("multipart/form-data")
+            ):
                 return JSONResponse(
                     status_code=415,
                     content={
@@ -263,7 +297,12 @@ async def require_auth_on_mutations(request: Request, call_next):
         or path.startswith("/api/v1/team/")  # GET/POST/DELETE all need auth+role
     )
 
-    if needs_auth and not path.startswith(skip) and not path.startswith("/mcp/") and not path.startswith("/ws/"):
+    if (
+        needs_auth
+        and not path.startswith(skip)
+        and not path.startswith("/mcp/")
+        and not path.startswith("/ws/")
+    ):
         auth = request.headers.get("Authorization", "").replace("Bearer ", "")
         if not auth:
             auth = request.headers.get("X-API-Key", "")
@@ -285,12 +324,18 @@ async def require_auth_on_mutations(request: Request, call_next):
         if auth == cfg.admin_key:
             # Admin env-var key gets implicit admin role
             from core.auth import APIKey
+
             api_key_obj = APIKey(
-                id="env_admin", key_hash="env", label="env_admin",
-                scopes=["admin"], created_at=0, role="admin",
+                id="env_admin",
+                key_hash="env",
+                label="env_admin",
+                scopes=["admin"],
+                created_at=0,
+                role="admin",
             )
         else:
             from core.auth import get_key_store
+
             ks = get_key_store()
             api_key_obj = ks.verify(auth)
             if not api_key_obj:
@@ -310,6 +355,7 @@ async def require_auth_on_mutations(request: Request, call_next):
         # For write requests: viewer is not enough
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             from core.auth import role_has_at_least
+
             if not role_has_at_least(api_key_obj.role, "operator"):
                 return JSONResponse(
                     status_code=403,
@@ -331,13 +377,83 @@ async def require_auth_on_mutations(request: Request, call_next):
 
 
 @app.middleware("http")
+async def require_admin_key_on_mcp(request: Request, call_next):
+    """Require WP_ADMIN_KEY on every /mcp route.
+
+    The AI Wallet Agent MCP server can decrypt private keys (vault_get with
+    include_private_key), sweep wallets, and broadcast transactions. It was
+    previously exempted from authentication in require_auth_on_mutations
+    (which skipped /mcp/), allowing any unauthenticated caller to drain all
+    wallets — including via agent_confirm, which self-approved any caller.
+
+    All /mcp routes now require the admin key, accepted via:
+      - X-Admin-Key header
+      - Authorization: Bearer <key>
+      - X-API-Key header
+    Comparison is constant-time (hmac.compare_digest). On success the
+    authenticated actor is recorded in the asyncio context so the HITL
+    confirmation flow (core.agent_safety) binds confirmations to the
+    actor that initiated the action.
+
+    CORS preflight (OPTIONS) is skipped so browsers can negotiate the
+    X-Admin-Key custom header.
+    """
+    path = request.url.path
+    if not path.startswith("/mcp"):
+        return await call_next(request)
+
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    key = request.headers.get("X-Admin-Key", "")
+    if not key:
+        auth = request.headers.get("Authorization", "")
+        if auth.lower().startswith("bearer "):
+            key = auth[7:].strip()
+    if not key:
+        key = request.headers.get("X-API-Key", "")
+
+    if not key or not hmac.compare_digest(key, cfg.admin_key):
+        logger.warning(
+            "mcp_auth_failed method=%s path=%s request_id=%s",
+            request.method,
+            path,
+            getattr(request.state, "request_id", "-"),
+        )
+        return JSONResponse(
+            status_code=401,
+            content={
+                "type": "/errors/unauthorized",
+                "title": "Unauthorized",
+                "status": 401,
+                "detail": "MCP requires the admin key. Provide it via X-Admin-Key or Authorization: Bearer header.",
+                "request_id": getattr(request.state, "request_id", ""),
+                "timestamp": datetime.now(UTC).isoformat(),
+                "code": "mcp_unauthorized",
+            },
+        )
+
+    # Bind the authenticated actor for HITL confirmations (agent_safety)
+    from core.agent_safety import set_actor
+
+    set_actor("env_admin")
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.time()
     rid = getattr(request.state, "request_id", "-")
     response = await call_next(request)
     elapsed = time.time() - start
-    logger.info("http_request method=%s path=%s status=%d elapsed=%.3fs request_id=%s",
-                request.method, request.url.path, response.status_code, elapsed, rid)
+    logger.info(
+        "http_request method=%s path=%s status=%d elapsed=%.3fs request_id=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed,
+        rid,
+    )
     return response
 
 
@@ -360,7 +476,18 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         status_code=status,
         content={
             "type": "about:blank",
-            "title": {400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 422: "Unprocessable Entity", 429: "Too Many Requests", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}.get(status, "Error"),
+            "title": {
+                400: "Bad Request",
+                401: "Unauthorized",
+                403: "Forbidden",
+                404: "Not Found",
+                409: "Conflict",
+                422: "Unprocessable Entity",
+                429: "Too Many Requests",
+                500: "Internal Server Error",
+                502: "Bad Gateway",
+                503: "Service Unavailable",
+            }.get(status, "Error"),
             "status": status,
             "detail": detail,
             "request_id": rid,
@@ -374,8 +501,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     rid = _request_id(request)
     if isinstance(exc, (HTTPException, FastAPIHTTPException, StarletteHTTPException)):
         return await http_exception_handler(request, exc)
-    logger.error("unhandled_exception method=%s path=%s exc=%s request_id=%s",
-                 request.method, request.url.path, f"{type(exc).__name__}: {exc}", rid)
+    logger.error(
+        "unhandled_exception method=%s path=%s exc=%s request_id=%s",
+        request.method,
+        request.url.path,
+        f"{type(exc).__name__}: {exc}",
+        rid,
+    )
     return JSONResponse(
         status_code=500,
         content={
@@ -406,7 +538,12 @@ app.include_router(retention_router.router)
 # and use role-based access control via require_role dependency.
 
 
-@app.post("/api/v1/team/keys", tags=["team-keys"], summary="Create Team Key", description="Create a team API key with specific role and permissions.")
+@app.post(
+    "/api/v1/team/keys",
+    tags=["team-keys"],
+    summary="Create Team Key",
+    description="Create a team API key with specific role and permissions.",
+)
 async def create_team_key(label: str, role: str = "operator", request: Request = None):
     """Create a team API key with specific role and permissions.
 
@@ -434,8 +571,12 @@ async def create_team_key(label: str, role: str = "operator", request: Request =
         )
     store = get_key_store()
     key_id, raw_key = store.create(label=label, role=role, owner=caller_key.owner or caller_key.id)
-    get_audit().log("team.key.create", actor=caller_key.id, resource=key_id,
-                    detail={"label": label, "role": role})
+    get_audit().log(
+        "team.key.create",
+        actor=caller_key.id,
+        resource=key_id,
+        detail={"label": label, "role": role},
+    )
     return {
         "key_id": key_id,
         "api_key": raw_key,
@@ -445,7 +586,12 @@ async def create_team_key(label: str, role: str = "operator", request: Request =
     }
 
 
-@app.get("/api/v1/team/keys", tags=["team-keys"], summary="List Team Keys", description="List all team API keys.")
+@app.get(
+    "/api/v1/team/keys",
+    tags=["team-keys"],
+    summary="List Team Keys",
+    description="List all team API keys.",
+)
 async def list_team_keys(request: Request):
     """List all team API keys (admin only)."""
     caller_key = getattr(request.state, "api_key_obj", None)
@@ -455,7 +601,12 @@ async def list_team_keys(request: Request):
     return {"keys": store.list()}
 
 
-@app.delete("/api/v1/team/keys/{key_id}", tags=["team-keys"], summary="Revoke Team Key", description="Revoke a team API key immediately.")
+@app.delete(
+    "/api/v1/team/keys/{key_id}",
+    tags=["team-keys"],
+    summary="Revoke Team Key",
+    description="Revoke a team API key immediately.",
+)
 async def revoke_team_key(key_id: str, request: Request):
     """Revoke a team API key immediately (admin only)."""
     caller_key = getattr(request.state, "api_key_obj", None)
@@ -469,7 +620,11 @@ async def revoke_team_key(key_id: str, request: Request):
     return {"revoked": True, "key_id": key_id}
 
 
-@app.get("/health", summary="Health", description="Health check endpoint. Checks vault, key store, proof of generation, and webhook deliverer status.")
+@app.get(
+    "/health",
+    summary="Health",
+    description="Health check endpoint. Checks vault, key store, proof of generation, and webhook deliverer status.",
+)
 async def health():
     status = "ok"
     status_code = 200
@@ -477,6 +632,7 @@ async def health():
 
     try:
         from core.vault import get_vault
+
         v = get_vault()
         v.count()
         checks["vault"] = "ok"
@@ -486,6 +642,7 @@ async def health():
 
     try:
         from core.auth import get_key_store
+
         ks = get_key_store()
         ks.list()
         checks["key_store"] = "ok"
@@ -495,6 +652,7 @@ async def health():
 
     try:
         from core.proof import get_proof
+
         p = get_proof()
         p.stats()
         checks["proof"] = "ok"
@@ -504,6 +662,7 @@ async def health():
 
     try:
         from core.webhooks import get_webhook_deliverer
+
         wd = get_webhook_deliverer()
         checks["webhooks"] = "ok" if wd._running else "not_running"
     except Exception as e:
@@ -524,10 +683,10 @@ async def health():
     )
 
 
-
 @app.get("/version", summary="Version", description="Service version endpoint.")
 async def version():
     from core.config import cfg
+
     return {
         "version": cfg.version,
         "service": "WalletPress API",
@@ -537,9 +696,14 @@ async def version():
     }
 
 
-@app.get("/", summary="Root", description="API root endpoint. Returns service metadata, version, docs links, and trust/security information.")
+@app.get(
+    "/",
+    summary="Root",
+    description="API root endpoint. Returns service metadata, version, docs links, and trust/security information.",
+)
 async def root():
     from core.proof import get_source_tree_hash
+
     return {
         "service": "WalletPress API",
         "version": cfg.version,
@@ -559,7 +723,12 @@ async def root():
     }
 
 
-@app.get("/trust/build", tags=["trust"], summary="Trust Build", description="Reproducible build verification. Returns source commit hash and Docker image metadata for build reproducibility verification.")
+@app.get(
+    "/trust/build",
+    tags=["trust"],
+    summary="Trust Build",
+    description="Reproducible build verification. Returns source commit hash and Docker image metadata for build reproducibility verification.",
+)
 async def trust_build():
     """Reproducible build verification.
 
@@ -568,12 +737,15 @@ async def trust_build():
     to verify the running code matches the open-source repository.
     """
     from core.proof import get_source_tree_hash
+
     commit = get_source_tree_hash()
     return {
         "service": "WalletPress",
         "source_repository": "https://github.com/cryptorugmuncher/walletpress",
         "source_commit": commit,
-        "source_commit_url": f"https://github.com/cryptorugmuncher/walletpress/commit/{commit}" if commit != "unknown" else "",
+        "source_commit_url": f"https://github.com/cryptorugmuncher/walletpress/commit/{commit}"
+        if commit != "unknown"
+        else "",
         "build_method": "Docker multi-stage build (see Dockerfile)",
         "build_command": "docker build -t walletpress .",
         "verify_command": "docker pull walletpress && docker inspect walletpress --format '{{.Id}}' | cut -d: -f2",
@@ -582,7 +754,12 @@ async def trust_build():
     }
 
 
-@app.get("/trust/audit", tags=["trust"], summary="Trust Audit", description="Public audit log. Returns recent immutable audit entries proving operational transparency.")
+@app.get(
+    "/trust/audit",
+    tags=["trust"],
+    summary="Trust Audit",
+    description="Public audit log. Returns recent immutable audit entries proving operational transparency.",
+)
 async def trust_audit():
     """Public audit log — immutable, append-only.
 
@@ -590,6 +767,7 @@ async def trust_audit():
     only new entries can be appended. This proves operational transparency.
     """
     from core.audit import get_audit
+
     audit = get_audit()
     entries = audit.query(limit=50)
     stats = audit.stats()
@@ -604,16 +782,20 @@ async def trust_audit():
     }
 
 
+# Mount AI Wallet Agent MCP server (SSE transport)
+# Connect via: opencode, Claude Code, Cursor, or any MCP client
+# Endpoint: GET /mcp/sse  or  POST /mcp/messages
+# SECURITY: every /mcp route requires WP_ADMIN_KEY (require_admin_key_on_mcp).
+# This mount MUST be registered before the root "/" x402 mount below — Starlette
+# matches the first mount whose prefix matches, and Mount("/") matches every
+# path, which would otherwise swallow /mcp/* and return 404.
+app.mount("/mcp", agent_mcp.sse_app())
+
 # Mount x402 marketplace as sub-app (was standalone x402_service.py)
 # x402's endpoints (/api/v1/marketplace/generate, /api/v1/marketplace/pricing, etc.) become
 # available at /api/v1/marketplace/... when mounted at root. Its /health is not mounted
 # to avoid conflict with main app's /health.
 app.mount("/", x402_app)
-
-# Mount AI Wallet Agent MCP server (SSE transport)
-# Connect via: opencode, Claude Code, Cursor, or any MCP client
-# Endpoint: GET /mcp/sse  or  POST /mcp/messages
-app.mount("/mcp", agent_mcp.sse_app())
 
 
 # ── WebSocket Event Stream ───────────────────────────────────
@@ -643,6 +825,7 @@ async def websocket_events(ws: WebSocket):
       NEVER use URL query params for auth tokens — they leak to access logs.
     """
     import asyncio as _asyncio
+
     await ws.accept()
 
     # ── Extract token securely (never from URL query params) ──
@@ -668,8 +851,8 @@ async def websocket_events(ws: WebSocket):
                     _ws_clients[ws] = set(subs)
         except (_asyncio.TimeoutError, _asyncio.CancelledError):
             pass
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"WebSocket auth message error: {e}")
 
     # [DEPRECATED] Fallback: query parameter — leaks to logs
     if not token:
@@ -684,6 +867,7 @@ async def websocket_events(ws: WebSocket):
     # ── Verify token ──
     if token:
         from core.auth import get_key_store
+
         ks = get_key_store()
         if not ks.verify(token):
             await ws.send_json({"error": "Invalid API key"})
@@ -700,7 +884,9 @@ async def websocket_events(ws: WebSocket):
             now = time.monotonic()
             last = _ws_rate.get(ws, 0)
             if now - last < 1.0 / _WS_RATE_LIMIT:
-                await ws.send_json({"event": "rate_limited", "data": {"message": "Slow down (max 10 msg/s)"}})
+                await ws.send_json(
+                    {"event": "rate_limited", "data": {"message": "Slow down (max 10 msg/s)"}}
+                )
                 continue
             _ws_rate[ws] = now
             try:
@@ -730,7 +916,8 @@ async def broadcast_ws(event_type: str, data: dict):
             continue
         try:
             await ws.send_text(message)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"WebSocket send failed: {e}")
             dead.append(ws)
     for ws in dead:
         _ws_clients.pop(ws, None)
@@ -744,7 +931,8 @@ from core.event_bus import subscribe as _subscribe_events
 def _ws_event_forwarder(event_type: str, data: dict):
     """Forward events from the bus to the WebSocket broadcast loop."""
     import asyncio
-    asyncio.ensure_future(broadcast_ws(event_type, data))
+
+    asyncio.get_event_loop().create_task(broadcast_ws(event_type, data))
 
 
 _subscribe_events(_ws_event_forwarder)
@@ -752,6 +940,7 @@ _subscribe_events(_ws_event_forwarder)
 
 if __name__ == "__main__":
     import uvicorn
+
     logging.basicConfig(level=logging.INFO)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else cfg.port
     uvicorn.run("main:app", host=cfg.host, port=port, reload=True)

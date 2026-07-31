@@ -1,40 +1,34 @@
 """Tests: Agent Safety — permission tiers, kill switch, spending limits, address book, HITL, audit trail."""
 
-import json
 import os
-import tempfile
 import time
-from pathlib import Path
 from unittest.mock import patch
 
 # Use conftest.py's env vars — do NOT override WP_VAULT_PASSWORD or WP_DATA_DIR here
-
-from core.config import cfg
 from core.agent_safety import (
-    request_confirmation,
-    confirm_action,
-    reject_action,
-    list_pending,
-    get_tier,
-    check_action_allowed,
-    is_write_action,
-    is_killed,
-    kill_agent,
-    resurrect_agent,
     _period_start,
-    check_spending_limit,
-    record_spending,
-    list_limits,
-    allowlist_add,
-    blocklist_add,
     address_book_list,
     address_book_remove,
-    check_address,
+    allowlist_add,
     audit_log,
     audit_trail,
+    blocklist_add,
+    check_action_allowed,
+    check_address,
+    check_spending_limit,
+    confirm_action,
+    get_tier,
+    is_killed,
+    is_write_action,
+    kill_agent,
+    list_limits,
+    list_pending,
+    record_spending,
+    reject_action,
+    request_confirmation,
+    resurrect_agent,
     verify_audit_chain,
 )
-
 
 # ── Permission Tiers ──────────────────────────────────────────────────────────
 
@@ -70,7 +64,7 @@ def test_check_action_allowed_plan_write_blocked():
 
 def test_check_action_allowed_plan_plan_allowed():
     with patch.dict(os.environ, {"WP_AGENT_TIER": "plan"}):
-        allowed, reason = check_action_allowed("agent_plan")
+        allowed, _ = check_action_allowed("agent_plan")
         assert allowed is True
 
 
@@ -83,13 +77,13 @@ def test_check_action_allowed_read_blocks_write():
 
 def test_check_action_allowed_read_blocks_plan():
     with patch.dict(os.environ, {"WP_AGENT_TIER": "read"}):
-        allowed, reason = check_action_allowed("agent_plan")
+        allowed, _ = check_action_allowed("agent_plan")
         assert allowed is False
 
 
 def test_check_action_allowed_read_allows_other():
     with patch.dict(os.environ, {"WP_AGENT_TIER": "read"}):
-        allowed, reason = check_action_allowed("get_balance")
+        allowed, _ = check_action_allowed("get_balance")
         assert allowed is True
 
 
@@ -377,3 +371,96 @@ def test_verify_audit_chain_empty():
 def test_check_scam_db_not_loaded_is_safe():
     result = check_address("0xclean_addr_12345", "eth")
     assert result["allowed"] is True
+
+
+# ── HITL Actor Binding (WP-007) ───────────────────────────────────────────────
+
+
+def test_set_actor_get_actor():
+    from core.agent_safety import get_actor, set_actor
+
+    set_actor("admin:key1")
+    assert get_actor() == "admin:key1"
+    set_actor("")
+    assert get_actor() == ""
+
+
+def test_request_confirmation_records_requested_by():
+    from core.agent_safety import _get_hitl_db
+
+    req = request_confirmation(
+        "wallet_sweep",
+        {"from_wallet_id": "w1", "to_address": "0x..."},
+        reason="actor bind test",
+        requested_by="admin:key1",
+    )
+    cid = req["confirmation_id"]
+    row = (
+        _get_hitl_db()
+        .execute("SELECT requested_by FROM hitl_confirmations WHERE id = ?", (cid,))
+        .fetchone()
+    )
+    assert row["requested_by"] == "admin:key1"
+
+
+def test_request_confirmation_defaults_to_context_actor():
+    from core.agent_safety import _get_hitl_db, set_actor
+
+    set_actor("admin:ctx")
+    try:
+        req = request_confirmation("vault_delete", {"wallet_id": "w2"}, reason="ctx test")
+        row = (
+            _get_hitl_db()
+            .execute(
+                "SELECT requested_by FROM hitl_confirmations WHERE id = ?",
+                (req["confirmation_id"],),
+            )
+            .fetchone()
+        )
+        assert row["requested_by"] == "admin:ctx"
+    finally:
+        set_actor("")
+
+
+def test_confirm_action_different_actor_denied():
+    req = request_confirmation(
+        "wallet_sweep",
+        {"from_wallet_id": "w3", "to_address": "0xattacker"},
+        reason="deny test",
+        requested_by="admin:key1",
+    )
+    cid = req["confirmation_id"]
+    result = confirm_action(cid, confirmed_by="admin:attacker")
+    assert "error" in result
+    assert "different actor" in result["error"].lower()
+
+
+def test_confirm_action_same_actor_allowed():
+    req = request_confirmation(
+        "wallet_sweep",
+        {"from_wallet_id": "w4", "to_address": "0xlegit"},
+        reason="allow test",
+        requested_by="admin:key1",
+    )
+    cid = req["confirmation_id"]
+    result = confirm_action(cid, confirmed_by="admin:key1")
+    assert result["approved"] is True
+    assert result["action"] == "wallet_sweep"
+
+
+def test_confirm_action_context_actor_flow():
+    """End-to-end: context actor binds request, only same actor confirms."""
+    from core.agent_safety import set_actor
+
+    set_actor("env_admin")
+    try:
+        req = request_confirmation("key_export", {"wallet_id": "w5"}, reason="flow test")
+        cid = req["confirmation_id"]
+        # A different actor attempting to confirm is denied...
+        denied = confirm_action(cid, confirmed_by="human")
+        assert "error" in denied
+        # ...the bound actor can confirm.
+        result = confirm_action(cid, confirmed_by="env_admin")
+        assert result["approved"] is True
+    finally:
+        set_actor("")

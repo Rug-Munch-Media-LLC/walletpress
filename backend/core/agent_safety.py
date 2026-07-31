@@ -21,12 +21,32 @@ import secrets
 import sqlite3
 import threading
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
 from core.config import cfg
 
 logger = logging.getLogger("wp.agent.safety")
+
+# ── Authenticated Actor Context ────────────────────────────────────────────────
+# The HTTP auth layer (main.py) sets the authenticated actor (admin key holder)
+# before dispatching into the MCP server. asyncio propagates the ContextVar to
+# the SSE session task, so every tool call made by the same MCP session sees the
+# same actor. HITL confirmations are bound to this actor: only the actor that
+# requested a confirmation may approve it.
+_actor_ctx: ContextVar[str] = ContextVar("wp_agent_actor", default="")
+
+
+def set_actor(actor: str) -> None:
+    """Record the authenticated actor for the current context."""
+    _actor_ctx.set(actor)
+
+
+def get_actor() -> str:
+    """Return the authenticated actor for the current context ('' = unauthenticated)."""
+    return _actor_ctx.get()
+
 
 SAFETY_DB = cfg.data_dir / "agent_safety.db"
 
@@ -68,10 +88,19 @@ def _get_hitl_db():
                 created_at REAL NOT NULL,
                 expires_at REAL NOT NULL,
                 status TEXT DEFAULT 'pending',
-                confirmed_by TEXT DEFAULT ''
+                confirmed_by TEXT DEFAULT '',
+                requested_by TEXT DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_hitl_status ON hitl_confirmations(status);
         """)
+        # Migration: older databases lack the requested_by column.
+        cols = [
+            r[1] for r in _hitl_pool.execute("PRAGMA table_info(hitl_confirmations)").fetchall()
+        ]
+        if "requested_by" not in cols:
+            _hitl_pool.execute(
+                "ALTER TABLE hitl_confirmations ADD COLUMN requested_by TEXT DEFAULT ''"
+            )
     return _hitl_pool
 
 
@@ -80,11 +109,20 @@ def _get_hitl_db():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def request_confirmation(action: str, params: dict, reason: str = "", ttl: int = 900) -> dict:
+def request_confirmation(
+    action: str, params: dict, reason: str = "", ttl: int = 900, requested_by: str = ""
+) -> dict:
     """Request human confirmation for a WRITE action.
 
     Persisted to SQLite — survives server restarts.
+
+    SECURITY: the requesting actor is bound to the confirmation. If the
+    request is made by an authenticated actor (admin key holder), only the
+    SAME actor may approve it via confirm_action(). This prevents a caller
+    from self-approving a pending wallet-draining action.
     """
+    if not requested_by:
+        requested_by = get_actor()
     conf_id = f"conf_{secrets.token_hex(8)}"
     now = time.time()
     entry = {
@@ -96,11 +134,12 @@ def request_confirmation(action: str, params: dict, reason: str = "", ttl: int =
         "expires_at": now + ttl,
         "status": "pending",
         "confirmed_by": "",
+        "requested_by": requested_by,
     }
     with _pending_lock:
         pool = _get_hitl_db()
         pool.execute(
-            "INSERT INTO hitl_confirmations (id, action, params, reason, created_at, expires_at, status, confirmed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO hitl_confirmations (id, action, params, reason, created_at, expires_at, status, confirmed_by, requested_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 entry["id"],
                 entry["action"],
@@ -110,6 +149,7 @@ def request_confirmation(action: str, params: dict, reason: str = "", ttl: int =
                 entry["expires_at"],
                 entry["status"],
                 entry["confirmed_by"],
+                entry["requested_by"],
             ),
         )
     logger.info(f"HITL: Confirmation requested {conf_id} for {action}")
@@ -123,7 +163,12 @@ def request_confirmation(action: str, params: dict, reason: str = "", ttl: int =
 
 
 def confirm_action(confirmation_id: str, confirmed_by: str = "human") -> dict:
-    """Confirm a pending action. Returns the stored params for execution."""
+    """Confirm a pending action. Returns the stored params for execution.
+
+    SECURITY: if the confirmation was requested by an authenticated actor
+    (requested_by is set), confirmations from any OTHER actor are rejected.
+    Only the admin key that initiated the action may confirm it.
+    """
     with _pending_lock:
         pool = _get_hitl_db()
         row = pool.execute(
@@ -138,6 +183,24 @@ def confirm_action(confirmation_id: str, confirmed_by: str = "human") -> dict:
                 "UPDATE hitl_confirmations SET status = 'expired' WHERE id = ?", (confirmation_id,)
             )
             return {"error": "Confirmation expired"}
+        # Actor binding: a confirmation created by an authenticated actor can
+        # only be approved by the SAME actor. This closes the self-approval
+        # bypass where any caller could confirm (and thus execute) a pending
+        # wallet-draining action.
+        requested_by = row["requested_by"] or ""
+        if requested_by and confirmed_by != requested_by:
+            logger.warning(
+                "HITL: Confirmation %s requested by %r but confirmed by %r — denied",
+                confirmation_id,
+                requested_by,
+                confirmed_by,
+            )
+            return {
+                "error": (
+                    "Confirmation was requested by a different actor. Only the "
+                    "admin key that initiated the action may confirm it."
+                )
+            }
         pool.execute(
             "UPDATE hitl_confirmations SET status = 'approved', confirmed_by = ? WHERE id = ?",
             (confirmed_by, confirmation_id),
@@ -346,7 +409,7 @@ def _period_start(period: str) -> float:
     weekly: start of current UTC week (Monday)
     monthly: start of current UTC month
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc)
     if period == "daily":
@@ -598,7 +661,7 @@ def _load_scam_db():
             try:
                 data = json.loads(db_path.read_text())
                 for chain, addrs in data.items():
-                    _SCAM_DB[chain.lower()] = set(a.lower() for a in addrs)
+                    _SCAM_DB[chain.lower()] = {a.lower() for a in addrs}
                 logger.info(f"Loaded {sum(len(v) for v in _SCAM_DB.values())} scam addresses")
             except Exception as e:
                 logger.warning(f"Failed to load scam DB: {e}")
@@ -761,8 +824,9 @@ async def simulate_transaction(
     asyncio.run() which raises "asyncio.run() cannot be called from a running
     event loop" in that context.
     """
-    from routers.balance_fetcher import EVM_RPC
     import httpx
+
+    from routers.balance_fetcher import EVM_RPC
 
     if chain in EVM_RPC:
         rpc_url = EVM_RPC[chain]

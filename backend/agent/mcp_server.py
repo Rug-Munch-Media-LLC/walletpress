@@ -13,29 +13,30 @@ import time
 
 from mcp.server.fastmcp import FastMCP
 
-from core.config import cfg
-from core.vault import WalletEntry, get_vault
 from core.agent_safety import (
+    address_book_list,
+    allowlist_add,
+    audit_log,
+    audit_trail,
+    blocklist_add,
     check_action_allowed,
-    is_killed,
-    request_confirmation,
-    confirm_action,
-    reject_action,
-    list_pending,
     check_address,
     check_spending_limit,
-    record_spending,
-    audit_log,
-    simulate_transaction,
+    confirm_action,
+    get_actor,
+    is_killed,
     kill_agent as safety_kill,
-    resurrect_agent as safety_resurrect,
-    allowlist_add,
-    blocklist_add,
-    address_book_list,
     list_limits,
-    audit_trail,
+    list_pending,
+    record_spending,
+    reject_action,
+    request_confirmation,
+    resurrect_agent as safety_resurrect,
+    simulate_transaction,
     verify_audit_chain,
 )
+from core.config import cfg
+from core.vault import WalletEntry, get_vault
 
 logger = logging.getLogger("wp.agent.mcp")
 
@@ -129,18 +130,29 @@ def agent_confirm(confirmation_id: str) -> dict:
     Args:
         confirmation_id: The ID from a previous agent_execute or write request
     """
-    result = confirm_action(confirmation_id)
+    # Bind the confirmation to the authenticated actor (admin key holder).
+    # agent_safety.confirm_action() rejects confirmations whose requesting
+    # actor differs, closing the self-approval bypass.
+    actor = get_actor() or "human"
+    result = confirm_action(confirmation_id, confirmed_by=actor)
     if "error" in result:
         return result
     action = result["action"]
     params = result["params"]
 
     # Execute the approved action inside HITL-skip mode
-    from agent.mcp_server import wallet_generate, wallet_from_mnemonic, vault_delete
-    from agent.mcp_server import wallet_rotate, wallet_sweep
-    from agent.mcp_server import schedule_dca, schedule_remove, anomaly_monitor
+    from agent.mcp_server import (
+        anomaly_monitor,
+        schedule_dca,
+        schedule_remove,
+        vault_delete,
+        wallet_from_mnemonic,
+        wallet_generate,
+        wallet_rotate,
+        wallet_sweep,
+    )
 
-    TOOL_MAP = {
+    tool_map = {
         "wallet_generate": lambda: _confirmed_call(action, params, wallet_generate, **params),
         "wallet_from_mnemonic": lambda: _confirmed_call(
             action, params, wallet_from_mnemonic, **params
@@ -153,18 +165,18 @@ def agent_confirm(confirmation_id: str) -> dict:
         "anomaly_monitor": lambda: _confirmed_call(action, params, anomaly_monitor, **params),
     }
 
-    fn = TOOL_MAP.get(action)
+    fn = tool_map.get(action)
     if not fn:
         return {"error": f"No confirmation handler for action: {action}"}
 
-    audit_log(action, params, {"status": "executing"}, confirmed_by="human")
+    audit_log(action, params, {"status": "executing"}, confirmed_by=actor)
     try:
         exec_result = fn()
-        audit_log(action, params, exec_result, confirmed_by="human")
+        audit_log(action, params, exec_result, confirmed_by=actor)
         return {"confirmed": True, "action": action, "result": exec_result}
     except Exception as e:
         err_msg = f"{type(e).__name__}: {e}"
-        audit_log(action, params, {"error": err_msg}, confirmed_by="human")
+        audit_log(action, params, {"error": err_msg}, confirmed_by=actor)
         return {"confirmed": True, "action": action, "error": err_msg}
 
 
@@ -254,8 +266,17 @@ def agent_referral_status() -> dict:
     and what revenue share each platform provides.
     """
     import os
-    from plugins.defi import REVENUE_MODE, REF_JUPITER_WALLET, REF_HYPERLIQUID_WALLET
-    from plugins.defi import REF_GMGN, REF_ODINBOT, REF_BANANA, REF_AXIOM, REF_PADRE
+
+    from plugins.defi import (
+        REF_AXIOM,
+        REF_BANANA,
+        REF_GMGN,
+        REF_HYPERLIQUID_WALLET,
+        REF_JUPITER_WALLET,
+        REF_ODINBOT,
+        REF_PADRE,
+        REVENUE_MODE,
+    )
 
     # Hosted mode = multi-tenant. Redact operator secrets from response.
     is_hosted = bool(os.getenv("WP_HOSTED_MODE", ""))
@@ -518,7 +539,7 @@ def wallet_from_mnemonic(mnemonic: str, chains: list[str] | None = None) -> dict
             chain=wallet.chain,
             address=wallet.address,
             label=wallet.label,
-            tags=wallet.tags + ["from_mnemonic"],
+            tags=[*wallet.tags, "from_mnemonic"],
             created_at=wallet.created_at,
             encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
             public_key=wallet.public_key_hex,
@@ -543,11 +564,19 @@ def vault_list(chain: str = "", limit: int = 50) -> list[dict]:
     """
     vault = get_vault()
     wallets = vault.list(chain=chain, limit=limit) if chain else vault.list(limit=limit)
-    return [{
-        "id": w.id, "chain": w.chain, "address": w.address,
-        "label": w.label, "tags": w.tags, "created_at": w.created_at,
-        "encrypted": w.encrypted, "balance_usd": w.balance_usd,
-    } for w in wallets]
+    return [
+        {
+            "id": w.id,
+            "chain": w.chain,
+            "address": w.address,
+            "label": w.label,
+            "tags": w.tags,
+            "created_at": w.created_at,
+            "encrypted": w.encrypted,
+            "balance_usd": w.balance_usd,
+        }
+        for w in wallets
+    ]
 
 
 @mcp.tool()
@@ -635,8 +664,9 @@ def vault_delete(wallet_id: str) -> dict:
     Args:
         wallet_id: Wallet ID to delete
     """
-    hitl = _write_with_hitl("vault_delete", {"wallet_id": wallet_id},
-                            f"Permanently delete wallet {wallet_id}")
+    hitl = _write_with_hitl(
+        "vault_delete", {"wallet_id": wallet_id}, f"Permanently delete wallet {wallet_id}"
+    )
     if hitl:
         return hitl
     vault = get_vault()
@@ -809,11 +839,12 @@ def _evm_sweep(wallet, to_address: str, chain: str) -> dict:
     Returns the tx_hash on success or an error dict on failure.
     """
     import asyncio
+
+    from core.balance_fetcher import EVM_RPC
     from eth_account import Account
     from web3 import Web3
     from web3.exceptions import Web3Exception
 
-    from core.balance_fetcher import EVM_RPC
     from routers.tx_broadcaster import _evm_broadcast
 
     rpc_url = EVM_RPC.get(chain)
@@ -880,8 +911,8 @@ def _evm_sweep(wallet, to_address: str, chain: str) -> dict:
             try:
                 amount_eth = float(w3.from_wei(value_wei, "ether"))
                 record_spending(chain, amount_eth)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"record_spending failed after sweep: {e}")
             audit_log(
                 "wallet_sweep",
                 {"from_wallet_id": wallet.id, "to_address": to_address, "chain": chain},
@@ -924,7 +955,7 @@ def validate_address(chain: str, address: str) -> dict:
         chain: Chain key
         address: Address to validate
     """
-    from wallet_engine.chains import validate_address as va, CHAINS
+    from wallet_engine.chains import CHAINS, validate_address as va
 
     chain_info = CHAINS.get(chain.lower())
     if not chain_info:
@@ -1192,9 +1223,9 @@ def verify_order(order_id: str) -> dict:
     Args:
         order_id: Order ID from the generate response (e.g. 'x402_abc123...')
     """
-    from core.wallet_db_pool import DbPool
     from core.config import cfg
     from core.proof import get_receipt_public_key
+    from core.wallet_db_pool import DbPool
 
     pool = DbPool(cfg.data_dir / "marketplace.db")
     row = pool.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()

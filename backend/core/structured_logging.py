@@ -97,5 +97,5 @@ def setup_logging(level: str | None = None) -> None:
     root_logger.setLevel(getattr(logging, level, logging.INFO))
 
     # Quiet noisy third-party loggers
-    for noisy in ("httpx", "httpcore", "urllib3", "asyncio", "botocore"):
+    for noisy in ("httpx", "httpcore", "urllib3", "asyncio"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

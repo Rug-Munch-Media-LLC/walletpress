@@ -13,8 +13,9 @@ import json
 import logging
 import secrets
 import time
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Query, Request, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from core.audit import get_audit
@@ -29,13 +30,19 @@ router = APIRouter(prefix="/api/v1", tags=["Retention"])
 
 
 def _audit(action, request, resource="", detail=None):
-    get_audit().log(action=action, actor=request.headers.get("X-API-Key", "")[:16] or "anonymous",
-                    resource=resource, detail=detail or {}, ip=request.client.host if request.client else "")
+    get_audit().log(
+        action=action,
+        actor=request.headers.get("X-API-Key", "")[:16] or "anonymous",
+        resource=resource,
+        detail=detail or {},
+        ip=request.client.host if request.client else "",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════
 #  1. BATCH CSV IMPORT
 # ═══════════════════════════════════════════════════════════════════
+
 
 @router.post("/import/batch")
 async def batch_import(request: Request, file: UploadFile):
@@ -70,17 +77,28 @@ async def batch_import(request: Request, file: UploadFile):
 
         if not chain or not priv_key:
             results["failed"] += 1
-            results["errors"].append({"row": results["imported"] + results["failed"], "error": "Missing chain or private_key"})
+            results["errors"].append(
+                {
+                    "row": results["imported"] + results["failed"],
+                    "error": "Missing chain or private_key",
+                }
+            )
             continue
 
         if chain not in CHAINS:
             results["failed"] += 1
-            results["errors"].append({"row": results["imported"] + results["failed"], "error": f"Unsupported chain: {chain}"})
+            results["errors"].append(
+                {
+                    "row": results["imported"] + results["failed"],
+                    "error": f"Unsupported chain: {chain}",
+                }
+            )
             continue
 
         try:
-            wallet = generator.import_from_private_key(chain, priv_key, label=label,
-                                                       tags=tags_str.split(",") if tags_str else [])
+            wallet = generator.import_from_private_key(
+                chain, priv_key, label=label, tags=tags_str.split(",") if tags_str else []
+            )
             entry = WalletEntry(
                 id=f"imp_{secrets.token_hex(6)}",
                 chain=wallet.chain,
@@ -89,7 +107,7 @@ async def batch_import(request: Request, file: UploadFile):
                 tags=wallet.tags,
                 group=group,
                 created_at=wallet.created_at,
-                encrypted_key=wallet.private_key_hex if wallet.encrypted else wallet.private_key_hex,
+                encrypted_key=wallet.private_key_hex,
                 encrypted=wallet.encrypted,
                 notes=notes,
             )
@@ -97,7 +115,9 @@ async def batch_import(request: Request, file: UploadFile):
             results["imported"] += 1
         except Exception as e:
             results["failed"] += 1
-            results["errors"].append({"row": results["imported"] + results["failed"], "error": str(e)[:100]})
+            results["errors"].append(
+                {"row": results["imported"] + results["failed"], "error": str(e)[:100]}
+            )
 
     return {
         "imported": results["imported"],
@@ -111,6 +131,7 @@ async def batch_import(request: Request, file: UploadFile):
 # ═══════════════════════════════════════════════════════════════════
 #  2. WALLET GROUPS (ORGANIZATION)
 # ═══════════════════════════════════════════════════════════════════
+
 
 @router.get("/vault/groups")
 async def list_groups():
@@ -138,8 +159,16 @@ async def get_group(group_name: str):
         "group": group_name,
         "count": len(filtered),
         "total_usd": total_usd,
-        "wallets": [{"id": w.id, "chain": w.chain, "address": w.address,
-                      "label": w.label, "balance_usd": w.balance_usd} for w in filtered],
+        "wallets": [
+            {
+                "id": w.id,
+                "chain": w.chain,
+                "address": w.address,
+                "label": w.label,
+                "balance_usd": w.balance_usd,
+            }
+            for w in filtered
+        ],
     }
 
 
@@ -203,9 +232,15 @@ async def wallet_compatibility(wallet_id: str):
     if not chain_info:
         return {"chain": wallet.chain, "compatible": [], "note": "Unknown chain"}
 
-    compat = _COMPATIBILITY_MATRIX.get(chain_info.family, {
-        "software": [], "hardware": [], "mobile": [], "note": "Compatibility not documented for this chain"
-    })
+    compat = _COMPATIBILITY_MATRIX.get(
+        chain_info.family,
+        {
+            "software": [],
+            "hardware": [],
+            "mobile": [],
+            "note": "Compatibility not documented for this chain",
+        },
+    )
 
     return {
         "wallet_id": wallet_id,
@@ -222,16 +257,61 @@ async def wallet_compatibility(wallet_id: str):
 # ═══════════════════════════════════════════════════════════════════
 
 _GAS_ESTIMATES = {
-    "eth": {"symbol": "ETH", "min_gas": 0.003, "avg_tx_cost": 0.0015, "note": "Ethereum L1 — ~$5-50 per tx"},
+    "eth": {
+        "symbol": "ETH",
+        "min_gas": 0.003,
+        "avg_tx_cost": 0.0015,
+        "note": "Ethereum L1 — ~$5-50 per tx",
+    },
     "base": {"symbol": "ETH", "min_gas": 0.0005, "avg_tx_cost": 0.0001, "note": "Base L2 — cheap"},
-    "polygon": {"symbol": "POL", "min_gas": 0.001, "avg_tx_cost": 0.0001, "note": "Polygon PoS — cheap"},
-    "arbitrum": {"symbol": "ETH", "min_gas": 0.0005, "avg_tx_cost": 0.0001, "note": "Arbitrum L2 — cheap"},
-    "optimism": {"symbol": "ETH", "min_gas": 0.0005, "avg_tx_cost": 0.0001, "note": "Optimism L2 — cheap"},
-    "avalanche": {"symbol": "AVAX", "min_gas": 0.001, "avg_tx_cost": 0.0003, "note": "Avalanche C-Chain — moderate"},
-    "bsc": {"symbol": "BNB", "min_gas": 0.0005, "avg_tx_cost": 0.0001, "note": "BNB Smart Chain — cheap"},
-    "sol": {"symbol": "SOL", "min_gas": 0.0005, "avg_tx_cost": 0.00001, "note": "Solana — <$0.01 per tx"},
-    "btc": {"symbol": "BTC", "min_gas": 0.0001, "avg_tx_cost": 0.00005, "note": "Bitcoin — variable fee market"},
-    "trx": {"symbol": "TRX", "min_gas": 1, "avg_tx_cost": 0.1, "note": "TRON — energy/bandwidth based"},
+    "polygon": {
+        "symbol": "POL",
+        "min_gas": 0.001,
+        "avg_tx_cost": 0.0001,
+        "note": "Polygon PoS — cheap",
+    },
+    "arbitrum": {
+        "symbol": "ETH",
+        "min_gas": 0.0005,
+        "avg_tx_cost": 0.0001,
+        "note": "Arbitrum L2 — cheap",
+    },
+    "optimism": {
+        "symbol": "ETH",
+        "min_gas": 0.0005,
+        "avg_tx_cost": 0.0001,
+        "note": "Optimism L2 — cheap",
+    },
+    "avalanche": {
+        "symbol": "AVAX",
+        "min_gas": 0.001,
+        "avg_tx_cost": 0.0003,
+        "note": "Avalanche C-Chain — moderate",
+    },
+    "bsc": {
+        "symbol": "BNB",
+        "min_gas": 0.0005,
+        "avg_tx_cost": 0.0001,
+        "note": "BNB Smart Chain — cheap",
+    },
+    "sol": {
+        "symbol": "SOL",
+        "min_gas": 0.0005,
+        "avg_tx_cost": 0.00001,
+        "note": "Solana — <$0.01 per tx",
+    },
+    "btc": {
+        "symbol": "BTC",
+        "min_gas": 0.0001,
+        "avg_tx_cost": 0.00005,
+        "note": "Bitcoin — variable fee market",
+    },
+    "trx": {
+        "symbol": "TRX",
+        "min_gas": 1,
+        "avg_tx_cost": 0.1,
+        "note": "TRON — energy/bandwidth based",
+    },
 }
 
 
@@ -247,11 +327,15 @@ async def gas_estimate(wallet_id: str):
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
 
-    estimate = _GAS_ESTIMATES.get(wallet.chain, {
-        "symbol": CHAINS.get(wallet.chain, {}).symbol or "?",
-        "min_gas": 0.01, "avg_tx_cost": 0.001,
-        "note": "Gas estimate not available for this chain. Add ~$1-5 worth of native token.",
-    })
+    estimate = _GAS_ESTIMATES.get(
+        wallet.chain,
+        {
+            "symbol": CHAINS.get(wallet.chain, {}).symbol or "?",
+            "min_gas": 0.01,
+            "avg_tx_cost": 0.001,
+            "note": "Gas estimate not available for this chain. Add ~$1-5 worth of native token.",
+        },
+    )
 
     return {
         "wallet_id": wallet_id,
@@ -265,6 +349,7 @@ async def gas_estimate(wallet_id: str):
 # ═══════════════════════════════════════════════════════════════════
 #  5. PORTFOLIO DASHBOARD
 # ═══════════════════════════════════════════════════════════════════
+
 
 @router.get("/portfolio")
 async def portfolio():
@@ -280,7 +365,12 @@ async def portfolio():
     for w in wallets:
         chain = w.chain or "unknown"
         if chain not in by_chain:
-            by_chain[chain] = {"chain": chain, "count": 0, "total_usd": 0.0, "name": CHAINS.get(chain, {}).name or chain}
+            by_chain[chain] = {
+                "chain": chain,
+                "count": 0,
+                "total_usd": 0.0,
+                "name": CHAINS.get(chain, {}).name or chain,
+            }
         by_chain[chain]["count"] += 1
         by_chain[chain]["total_usd"] += w.balance_usd
 
@@ -302,7 +392,13 @@ async def portfolio():
         "by_chain": sorted_chains,
         "by_group": sorted_groups,
         "top_10_wallets": [
-            {"id": w.id, "chain": w.chain, "address": w.address[:16] + "...", "label": w.label, "balance_usd": w.balance_usd}
+            {
+                "id": w.id,
+                "chain": w.chain,
+                "address": w.address[:16] + "...",
+                "label": w.label,
+                "balance_usd": w.balance_usd,
+            }
             for w in top_wallets
         ],
     }
@@ -312,8 +408,11 @@ async def portfolio():
 #  6. AUDIT LOG EXPORT
 # ═══════════════════════════════════════════════════════════════════
 
+
 @router.get("/audit-trail/export")
-async def audit_export(format: str = "csv", action: str = "", days: int = 7):
+async def audit_export(
+    fmt: Annotated[str, Query(alias="format")] = "csv", action: str = "", days: int = 7
+):
     """Export audit log as CSV for compliance reviews.
 
     Columns: timestamp, action, actor, resource, detail, ip
@@ -323,19 +422,21 @@ async def audit_export(format: str = "csv", action: str = "", days: int = 7):
     entries = audit.query(limit=10000, action=action)
     entries = [e for e in entries if e.get("ts", 0) >= cutoff]
 
-    if format == "csv":
+    if fmt == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["timestamp", "action", "actor", "resource", "detail", "ip"])
         for e in entries:
-            writer.writerow([
-                time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(e.get("ts", 0))),
-                e.get("action", ""),
-                e.get("actor", ""),
-                e.get("resource", ""),
-                json.dumps(e.get("detail", {})),
-                e.get("ip", ""),
-            ])
+            writer.writerow(
+                [
+                    time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(e.get("ts", 0))),
+                    e.get("action", ""),
+                    e.get("actor", ""),
+                    e.get("resource", ""),
+                    json.dumps(e.get("detail", {})),
+                    e.get("ip", ""),
+                ]
+            )
         return PlainTextResponse(
             content=output.getvalue(),
             media_type="text/csv",
@@ -356,6 +457,7 @@ def _get_seed_words():
     global _SEED_WORDS
     if _SEED_WORDS is None:
         from wallet_engine.generator import MNEMONIC_WORDS
+
         _SEED_WORDS = set(MNEMONIC_WORDS)
     return _SEED_WORDS
 
@@ -395,7 +497,10 @@ async def seed_repair(mnemonic: str = "", max_suggestions: int = 5):
 
     if not unknown_positions:
         if len(words) not in (12, 15, 18, 21, 24):
-            return {"valid": False, "error": f"Invalid word count: {len(words)}. Expected 12, 15, 18, 21, or 24."}
+            return {
+                "valid": False,
+                "error": f"Invalid word count: {len(words)}. Expected 12, 15, 18, 21, or 24.",
+            }
         return {"valid": True, "mnemonic": mnemonic, "word_count": len(words)}
 
     if len(unknown_positions) > 2:
@@ -414,7 +519,9 @@ async def seed_repair(mnemonic: str = "", max_suggestions: int = 5):
             if after and _levenshtein(after.lower(), candidate.lower()) > 3:
                 continue
             scored.append(candidate)
-        suggestion_list[pos] = sorted(scored, key=lambda w: abs(len(w) - len(words[pos - 1] if pos > 0 else "a")))[:max_suggestions]
+        suggestion_list[pos] = sorted(
+            scored, key=lambda w: abs(len(w) - len(words[pos - 1] if pos > 0 else "a"))
+        )[:max_suggestions]
 
     return {
         "valid": False,
@@ -429,6 +536,7 @@ async def seed_repair(mnemonic: str = "", max_suggestions: int = 5):
 #  8. WEBHOOK EVENT REPLAY
 # ═══════════════════════════════════════════════════════════════════
 
+
 @router.post("/webhooks/replay")
 async def webhook_replay(from_timestamp: float = 0, to_timestamp: float = 0, event_type: str = ""):
     """Replay missed webhook events within a time range.
@@ -440,6 +548,7 @@ async def webhook_replay(from_timestamp: float = 0, to_timestamp: float = 0, eve
       POST /webhooks/replay?from_timestamp=1719500000&to_timestamp=1719586400
     """
     from core.webhooks import delivery_log
+
     now = time.time()
     to = to_timestamp or now
     from_ts = from_timestamp or (now - 86400)  # Default: last 24h

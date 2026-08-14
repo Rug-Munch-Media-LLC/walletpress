@@ -21,9 +21,17 @@ def _vault() -> Vault:
     return Vault(tmp)
 
 
-def _entry(id: str, chain: str = "eth", address: str = "0xabc", label: str = "") -> WalletEntry:
+def _entry(
+    entry_id: str, chain: str = "eth", address: str = "0xabc", label: str = ""
+) -> WalletEntry:
     return WalletEntry(
-        id=id, chain=chain, address=address, label=label, tags=[], group="", created_at=time.time()
+        id=entry_id,
+        chain=chain,
+        address=address,
+        label=label,
+        tags=[],
+        group="",
+        created_at=time.time(),
     )
 
 

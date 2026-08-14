@@ -10,9 +10,12 @@ from __future__ import annotations
 import json
 import logging
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .config import cfg
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger("wp.audit")
 
@@ -33,14 +36,21 @@ class AuditLog:
             rotated = self.path.with_suffix(f".{int(time.time())}.jsonl.gz")
             import gzip
             import shutil
-            with open(self.path, "rb") as f_in:
-                with gzip.open(rotated, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
+
+            with open(self.path, "rb") as f_in, gzip.open(rotated, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
             self.path.unlink()
             self._ensure_log_exists()
             logger.info(f"Audit log rotated: {rotated}")
 
-    def log(self, action: str, actor: str = "", resource: str = "", detail: dict | None = None, ip: str = ""):
+    def log(
+        self,
+        action: str,
+        actor: str = "",
+        resource: str = "",
+        detail: dict | None = None,
+        ip: str = "",
+    ):
         entry = {
             "ts": time.time(),
             "action": action,

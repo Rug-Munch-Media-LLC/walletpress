@@ -77,8 +77,8 @@ def check_rpc_health() -> dict[str, Any]:
     Chains with NO RPC endpoint show as "❌ Requires RPC config"
     Chains with RELIABLE RPC show as "✅ Working"
     """
-    from wallet_engine.chains import CHAINS
     from routers.balance_fetcher import EVM_RPC, SOLANA_RPC, TRON_RPC
+    from wallet_engine.chains import CHAINS
 
     configured = 0
     total = len(CHAINS)

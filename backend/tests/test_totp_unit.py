@@ -2,7 +2,6 @@
 
 import base64
 import os
-import struct
 import tempfile
 import time
 from pathlib import Path
@@ -10,7 +9,7 @@ from pathlib import Path
 os.environ["WP_VAULT_PASSWORD"] = "test-pw-totp"
 os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_totp_")
 
-from core.totp import TOTPManager, TOTP_INTERVAL, TOTP_DIGITS, get_totp_manager
+from core.totp import TOTP_DIGITS, TOTPManager, get_totp_manager
 
 
 def _manager() -> TOTPManager:
@@ -84,8 +83,6 @@ class TestTOTPManager:
         m = _manager()
         secret_bytes = b"\x01" * 20
         code1 = m._totp_at_time(secret_bytes, 1000.0)
-        code2 = m._totp_at_time(secret_bytes, 2000.0)
-        # Different time windows may produce different codes
         assert isinstance(code1, str)
         assert len(code1) == TOTP_DIGITS
 

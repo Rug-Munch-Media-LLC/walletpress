@@ -1,5 +1,6 @@
 """Eliza OS Adapter (plugin) — Use WalletPress tools from Eliza agents."""
 from __future__ import annotations
+
 # Eliza plugins import via: https://github.com/elizaos/eliza/tree/main/packages/plugin-goat
 # This adapter provides the Eliza-compatible tool format for WalletPress.
 
@@ -19,6 +20,7 @@ def get_actions() -> list[dict]:
 
 def _handle(tool_name: str, params: dict) -> dict:
     import asyncio
+
     from agent.mcp_server import mcp
     for t in mcp._tool_manager.list_tools():
         if t.name == tool_name:

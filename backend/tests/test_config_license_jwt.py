@@ -12,12 +12,10 @@ from pathlib import Path
 os.environ["WP_VAULT_PASSWORD"] = "test-pw-clj"
 os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_clj_")
 
-import pytest
 
-from core.config import cfg, Config, _check_key_file_perms
-from core.license import LicenseManager, FEATURES, get_license
+from core.config import Config, _check_key_file_perms, cfg
 from core.jwt_auth import _load_key, validate_rmi_jwt
-
+from core.license import LicenseManager, get_license
 
 # ── Config tests ────────────────────────────────────────────────────
 

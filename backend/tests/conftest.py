@@ -10,6 +10,7 @@ os.environ["WP_ADMIN_KEY"] = "test-admin-key-12345"
 os.environ["WP_RATE_LIMIT"] = "0"
 
 from core.config import cfg
+
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
 
@@ -22,10 +23,10 @@ def client():
     app.state.generator = None
     app.state.proof = None
 
-    from core.auth import KeyStore
-    from core.vault import Vault
     from core.audit import AuditLog as AuditTrail
+    from core.auth import KeyStore
     from core.proof import ProofOfGeneration
+    from core.vault import Vault
     from wallet_engine.generator import WalletGenerator
 
     db_path = cfg.data_dir / "test.db"

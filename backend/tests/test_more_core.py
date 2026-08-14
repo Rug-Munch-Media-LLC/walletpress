@@ -2,7 +2,6 @@
 
 import os
 import tempfile
-from pathlib import Path
 
 os.environ["WP_VAULT_PASSWORD"] = "test-more-core"
 os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_more_")
@@ -43,12 +42,12 @@ def test_arweave_build_unsigned_tx():
 def test_dependencies_imports():
     """All dependency functions should be importable."""
     from core.dependencies import (
-        get_vault,
+        get_audit,
         get_generator,
         get_key_store,
-        get_audit,
         get_license,
         get_proof,
+        get_vault,
     )
 
     assert callable(get_vault)
@@ -72,7 +71,7 @@ def test_onboarding_has_functions():
 
 
 def test_proof_digest_basic():
-    from core.proof_digest import create_digest, verify_wallet, generate_verification_page
+    from core.proof_digest import create_digest, generate_verification_page, verify_wallet
 
     result = create_digest()
     assert "committed" in result or "leaf_count" in result

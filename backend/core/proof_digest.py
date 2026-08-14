@@ -27,9 +27,12 @@ ARCHITECTURE:
 from __future__ import annotations
 
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .proof import PROOF_VERSION, get_proof
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def create_digest() -> dict:
@@ -101,8 +104,8 @@ h1 {{ font-size: 20px; margin-bottom: 16px; }}
 </div>
 <div class="meta">
 <strong>Version:</strong> {PROOF_VERSION}<br>
-<strong>Timestamp:</strong> {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}<br>
-<strong>Total Wallet Attestations:</strong> {roots[0]['leaf_count'] if roots else 'N/A'}<br>
+<strong>Timestamp:</strong> {time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}<br>
+<strong>Total Wallet Attestations:</strong> {roots[0]["leaf_count"] if roots else "N/A"}<br>
 </div>
 <p>This Merkle root is the cryptographic commitment for all wallet
 generations in this batch. Each wallet's attestation is a leaf in

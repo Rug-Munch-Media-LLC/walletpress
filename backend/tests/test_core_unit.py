@@ -2,7 +2,6 @@
 
 import os
 import tempfile
-from pathlib import Path
 
 # Set env vars before importing modules
 os.environ["WP_VAULT_PASSWORD"] = "test-core-unit"
@@ -14,7 +13,6 @@ from core.config import cfg
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
 from core import event_bus
-
 
 # ── Config tests ──────────────────────────────────────────────────
 
@@ -87,7 +85,7 @@ def test_event_bus_no_subscriber():
 # ── Structured logging tests ──────────────────────────────────────
 
 
-from core.structured_logging import setup_logging, get_logger
+from core.structured_logging import get_logger, setup_logging
 
 
 def test_setup_logging_does_not_crash():

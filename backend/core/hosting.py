@@ -20,16 +20,19 @@ import os
 import secrets
 import sqlite3
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from argon2 import PasswordHasher
 from argon2.exceptions import (
-    VerifyMismatchError,
     InvalidHashError,
     VerificationError,
+    VerifyMismatchError,
 )
 
 from .config import cfg
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger("wp.hosting")
 

@@ -33,6 +33,7 @@ THE TRUST MODEL:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import logging
@@ -41,6 +42,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -71,7 +73,7 @@ _jobs_lock = threading.Lock()
 _WARM_POOL: dict[str, list[dict[str, Any]]] = {}
 _WARM_POOL_LOCK = threading.Lock()
 _WARM_POOL_TARGET = 500  # keep 500 wallets warm per chain
-_WARM_POOL_MIN = 100    # refill when below this
+_WARM_POOL_MIN = 100  # refill when below this
 _WARM_POOL_MAX_BATCH = 200  # generate at most this many per refill cycle
 
 # ── Per-API-key webhook configs ──────────────────────────────────
@@ -81,7 +83,7 @@ _api_webhooks_lock = threading.Lock()
 # ── SLA tracking ─────────────────────────────────────────────────
 _sla_start = time.time()
 _sla_generations: list[float] = []  # timestamps of last 10k generations
-_sla_latencies: list[float] = []    # seconds per generation
+_sla_latencies: list[float] = []  # seconds per generation
 _sla_lock = threading.Lock()
 
 
@@ -100,9 +102,18 @@ class GenerateRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=100000)
     payment_tx: str = Field(default="", help="USDC tx for paid orders. Leave empty for free tier.")
     api_key: str = Field(default="", help="Prepaid API key. Alternative to per-order payment.")
-    derivation_path: str = Field(default="", help="Custom BIP44 derivation path (e.g. m/44'/60'/0'/0/1). Empty = chain default.")
-    xpub: str = Field(default="", help="Master public key (xpub/tpub/ypub/zpub). Derive child keys without us seeing private keys.")
-    idempotency_key: str = Field(default="", help="Idempotency key. Same key = same order returned. Prevents double-charge on retry.")
+    derivation_path: str = Field(
+        default="",
+        help="Custom BIP44 derivation path (e.g. m/44'/60'/0'/0/1). Empty = chain default.",
+    )
+    xpub: str = Field(
+        default="",
+        help="Master public key (xpub/tpub/ypub/zpub). Derive child keys without us seeing private keys.",
+    )
+    idempotency_key: str = Field(
+        default="",
+        help="Idempotency key. Same key = same order returned. Prevents double-charge on retry.",
+    )
 
 
 class _DB:
@@ -144,20 +155,28 @@ class _DB:
         if not row or row["balance"] < amount:
             conn.close()
             return False
-        conn.execute("UPDATE credits SET balance = balance - ?, total_spent = total_spent + ? WHERE api_key = ?",
-                     (amount, amount, api_key))
+        conn.execute(
+            "UPDATE credits SET balance = balance - ?, total_spent = total_spent + ? WHERE api_key = ?",
+            (amount, amount, api_key),
+        )
         conn.commit()
         conn.close()
         return True
 
     def add_credits(self, api_key: str, amount: float):
         conn = self._conn()
-        existing = conn.execute("SELECT api_key FROM credits WHERE api_key = ?", (api_key,)).fetchone()
+        existing = conn.execute(
+            "SELECT api_key FROM credits WHERE api_key = ?", (api_key,)
+        ).fetchone()
         if existing:
-            conn.execute("UPDATE credits SET balance = balance + ? WHERE api_key = ?", (amount, api_key))
+            conn.execute(
+                "UPDATE credits SET balance = balance + ? WHERE api_key = ?", (amount, api_key)
+            )
         else:
-            conn.execute("INSERT INTO credits (api_key, balance, total_spent, created_at) VALUES (?, ?, 0, ?)",
-                         (api_key, amount, time.time()))
+            conn.execute(
+                "INSERT INTO credits (api_key, balance, total_spent, created_at) VALUES (?, ?, 0, ?)",
+                (api_key, amount, time.time()),
+            )
         conn.commit()
         conn.close()
 
@@ -166,7 +185,16 @@ class _DB:
         conn.execute(
             "INSERT INTO orders (order_id, chain, count, amount_usd, payment_tx, status, created_at, bot_ip, idempotency_key) "
             "VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?)",
-            (order_id, chain, count, amount, payment_tx or "free", time.time(), bot_ip, idempotency_key),
+            (
+                order_id,
+                chain,
+                count,
+                amount,
+                payment_tx or "free",
+                time.time(),
+                bot_ip,
+                idempotency_key,
+            ),
         )
         conn.commit()
         conn.close()
@@ -188,6 +216,7 @@ async def _verify_onchain_payment(chain: str, tx: str, expected: float) -> bool:
     if not tx:
         return False
     from core.x402_verify import verify_usdc_payment
+
     result = await verify_usdc_payment(chain, tx, expected)
     return result["verified"]
 
@@ -239,7 +268,11 @@ async def generate(req: GenerateRequest, request: Request):
         ).fetchone()
         conn.close()
         if existing:
-            return {"idempotent": True, "order_id": existing["order_id"], "note": "Order already processed with this idempotency key"}
+            return {
+                "idempotent": True,
+                "order_id": existing["order_id"],
+                "note": "Order already processed with this idempotency key",
+            }
 
     order_id = f"x402_{secrets.token_hex(8)}"
 
@@ -251,38 +284,48 @@ async def generate(req: GenerateRequest, request: Request):
             db.deduct(req.api_key, total)
             payment_method = "credits"
         else:
-            raise HTTPException(status_code=402, detail={
-                "error": "Insufficient credits",
-                "balance": bal,
-                "required": total,
-                "shortfall": round(total - bal, 2),
-                "buy_url": "/api/v1/marketplace/credits",
-            })
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "Insufficient credits",
+                    "balance": bal,
+                    "required": total,
+                    "shortfall": round(total - bal, 2),
+                    "buy_url": "/api/v1/marketplace/credits",
+                },
+            )
     elif total >= MIN_ORDER_USD and not req.payment_tx:
         from core.x402_verify import CHAIN_CONFIG, get_pay_to
+
         pay_to = get_pay_to(chain)
-        raise HTTPException(status_code=402, detail={
-            "error": "Payment required",
-            "amount_usd": total,
-            "min_wallets": max(int(MIN_ORDER_USD / PRICE_PER_WALLET), 100),
-            "price_per_wallet": PRICE_PER_WALLET,
-            "pricing_tiers": [
-                {"range": "1-999", "price": f"${PRICE_PER_WALLET}"},
-                {"range": "1,000-9,999", "price": f"${PRICE_1000}"},
-                {"range": "10,000-99,999", "price": f"${PRICE_10000}"},
-                {"range": "100,000+", "price": f"${PRICE_100000}"},
-            ],
-            "pay_to": pay_to,
-            "chain": chain,
-            "token": "USDC",
-            "supported_chains": list(CHAIN_CONFIG.keys()),
-            "instructions": f"Send ${total} USDC on {chain.upper()} to {pay_to} to receive {count} wallets. Minimum ${MIN_ORDER_USD}.",
-        })
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "Payment required",
+                "amount_usd": total,
+                "min_wallets": max(int(MIN_ORDER_USD / PRICE_PER_WALLET), 100),
+                "price_per_wallet": PRICE_PER_WALLET,
+                "pricing_tiers": [
+                    {"range": "1-999", "price": f"${PRICE_PER_WALLET}"},
+                    {"range": "1,000-9,999", "price": f"${PRICE_1000}"},
+                    {"range": "10,000-99,999", "price": f"${PRICE_10000}"},
+                    {"range": "100,000+", "price": f"${PRICE_100000}"},
+                ],
+                "pay_to": pay_to,
+                "chain": chain,
+                "token": "USDC",
+                "supported_chains": list(CHAIN_CONFIG.keys()),
+                "instructions": f"Send ${total} USDC on {chain.upper()} to {pay_to} to receive {count} wallets. Minimum ${MIN_ORDER_USD}.",
+            },
+        )
     elif total >= MIN_ORDER_USD and req.payment_tx:
         from core.x402_verify import verify_usdc_payment
+
         result = await verify_usdc_payment(chain, req.payment_tx, total)
         if not result["verified"]:
-            raise HTTPException(status_code=402, detail=f"Payment verification failed: {result['reason']}")
+            raise HTTPException(
+                status_code=402, detail=f"Payment verification failed: {result['reason']}"
+            )
         payment_method = "onchain"
     else:
         payment_method = "free"
@@ -295,6 +338,7 @@ async def generate(req: GenerateRequest, request: Request):
         # Zero-trust mode: derive from customer's master public key
         # We never see the private key. We derive child public keys and addresses.
         from bip_utils import Bip32Secp256k1, Bip32Slip10Ed25519
+
         chain_info = CHAINS.get(chain)
         if not chain_info:
             raise HTTPException(status_code=400, detail=f"Unsupported chain: {chain}")
@@ -304,30 +348,35 @@ async def generate(req: GenerateRequest, request: Request):
             else:
                 bip32_ctx = Bip32Secp256k1.FromXPub(req.xpub)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid xpub: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid xpub: {e}") from e
 
         for i in range(count):
             child_path = f"0/{i}"
             child_key = bip32_ctx.DerivePath(child_path)
             pub_bytes = child_key.PublicKey().Raw().ToBytes()
             from wallet_engine.generator import GeneratedWallet
+
             wallet = GeneratedWallet(
-                chain=chain, chain_name=chain_info.name, symbol=chain_info.symbol,
+                chain=chain,
+                chain_name=chain_info.name,
+                symbol=chain_info.symbol,
                 address=pub_bytes.hex()[:40],
                 public_key_hex=pub_bytes.hex(),
                 derivation_path=child_path,
                 label=f"x402_{order_id}_{i}",
                 tags=["x402", order_id, "xpub_derived"],
             )
-            wallets.append({
-                "index": i + 1,
-                "address": wallet.address,
-                "private_key": "",  # We never have it
-                "mnemonic": "",
-                "derivation_path": child_path,
-                "derivation_method": "xpub",
-                "note": "Derived from your xpub. We never had the private key.",
-            })
+            wallets.append(
+                {
+                    "index": i + 1,
+                    "address": wallet.address,
+                    "private_key": "",  # We never have it
+                    "mnemonic": "",
+                    "derivation_path": child_path,
+                    "derivation_method": "xpub",
+                    "note": "Derived from your xpub. We never had the private key.",
+                }
+            )
     else:
         for i in range(count):
             gen_kwargs = {
@@ -338,17 +387,21 @@ async def generate(req: GenerateRequest, request: Request):
             if req.derivation_path:
                 gen_kwargs["derivation_path"] = req.derivation_path
             wallet = generator.generate(**gen_kwargs)
-            wallets.append({
-                "index": i + 1,
-                "address": wallet.address,
-                "private_key": wallet.private_key_hex,
-                "mnemonic": wallet.mnemonic,
-                "derivation_path": wallet.derivation_path,
-            })
+            wallets.append(
+                {
+                    "index": i + 1,
+                    "address": wallet.address,
+                    "private_key": wallet.private_key_hex,
+                    "mnemonic": wallet.mnemonic,
+                    "derivation_path": wallet.derivation_path,
+                }
+            )
 
     # Log (no keys stored)
     db = get_db()
-    db.log_order(order_id, chain, count, total, req.payment_tx or "free", bot_ip, req.idempotency_key or "")
+    db.log_order(
+        order_id, chain, count, total, req.payment_tx or "free", bot_ip, req.idempotency_key or ""
+    )
 
     # Attest (public key hash only — never hash private keys)
     proof = get_proof()
@@ -375,19 +428,33 @@ async def generate(req: GenerateRequest, request: Request):
 
     # Broadcast live event
     from core.event_bus import emit as _emit_event
-    _emit_event("x402.generated", {
-        "order_id": order_id,
-        "chain": chain,
-        "count": count,
-        "total_usd": total,
-        "payment_method": payment_method,
-    })
+
+    _emit_event(
+        "x402.generated",
+        {
+            "order_id": order_id,
+            "chain": chain,
+            "count": count,
+            "total_usd": total,
+            "payment_method": payment_method,
+        },
+    )
 
     # Audit
-    get_audit().log("x402.generate", actor=req.api_key[:12] if req.api_key else "anon",
-                    resource=order_id, detail={"chain": chain, "count": count, "usd": total, "payment": payment_method})
+    get_audit().log(
+        "x402.generate",
+        actor=req.api_key[:12] if req.api_key else "anon",
+        resource=order_id,
+        detail={"chain": chain, "count": count, "usd": total, "payment": payment_method},
+    )
 
-    from core.proof import sign_receipt, sign_key_deletion, get_receipt_public_key, get_source_tree_hash
+    from core.proof import (
+        get_receipt_public_key,
+        get_source_tree_hash,
+        sign_key_deletion,
+        sign_receipt,
+    )
+
     receipt_sig = sign_receipt(order_id, chain, count, total, time.time())
     deletion_sig = sign_key_deletion(order_id, chain, count, [w["address"] for w in wallets])
     return {
@@ -438,13 +505,16 @@ async def buy_credits(amount: float = Body(default=10, ge=10), payment_tx: str =
         raise HTTPException(status_code=400, detail="Minimum $10 credit purchase")
     if not payment_tx:
         pay_addr = os.getenv("WP_PAYMENT_ADDRESS", "G1uZFfsdxK2PuH2Em5LhRkEcptxHWe4vy5BZak67QyKv")
-        raise HTTPException(status_code=402, detail={
-            "error": "Payment required",
-            "amount_usd": amount,
-            "pay_to": pay_addr,
-            "chain": "solana",
-            "token": "USDC",
-        })
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "Payment required",
+                "amount_usd": amount,
+                "pay_to": pay_addr,
+                "chain": "solana",
+                "token": "USDC",
+            },
+        )
 
     api_key = f"wp_cred_{secrets.token_hex(16)}"
     db = get_db()
@@ -464,19 +534,41 @@ async def pricing():
     return {
         "pricing": {
             "tiers": [
-                {"range": "1-999", "per_wallet": PRICE_PER_WALLET, "example": f"{100} wallets = ${calc_price(100)}"},
-                {"range": "1,000-9,999", "per_wallet": PRICE_1000, "example": f"{1000} wallets = ${calc_price(1000)}"},
-                {"range": "10,000-99,999", "per_wallet": PRICE_10000, "example": f"{10000} wallets = ${calc_price(10000)}"},
-                {"range": "100,000+", "per_wallet": PRICE_100000, "example": f"{100000} wallets = ${calc_price(100000)}"},
+                {
+                    "range": "1-999",
+                    "per_wallet": PRICE_PER_WALLET,
+                    "example": f"{100} wallets = ${calc_price(100)}",
+                },
+                {
+                    "range": "1,000-9,999",
+                    "per_wallet": PRICE_1000,
+                    "example": f"{1000} wallets = ${calc_price(1000)}",
+                },
+                {
+                    "range": "10,000-99,999",
+                    "per_wallet": PRICE_10000,
+                    "example": f"{10000} wallets = ${calc_price(10000)}",
+                },
+                {
+                    "range": "100,000+",
+                    "per_wallet": PRICE_100000,
+                    "example": f"{100000} wallets = ${calc_price(100000)}",
+                },
             ],
             "minimum_order_usd": MIN_ORDER_USD,
-            "prepaid_credits": {"minimum": "$10", "never_expire": True, "endpoint": "POST /api/v1/marketplace/credits"},
+            "prepaid_credits": {
+                "minimum": "$10",
+                "never_expire": True,
+                "endpoint": "POST /api/v1/marketplace/credits",
+            },
             "free_tier": {"wallets": FREE_WALLETS, "chains": 3},
         },
         "payment": {
             "chain": "solana",
             "token": "USDC",
-            "address": os.getenv("WP_PAYMENT_ADDRESS", "G1uZFfsdxK2PuH2Em5LhRkEcptxHWe4vy5BZak67QyKv"),
+            "address": os.getenv(
+                "WP_PAYMENT_ADDRESS", "G1uZFfsdxK2PuH2Em5LhRkEcptxHWe4vy5BZak67QyKv"
+            ),
         },
         "trust": {
             "open_source": True,
@@ -495,7 +587,11 @@ async def check_balance(api_key: str = ""):
         return {"error": "Provide api_key parameter"}
     db = get_db()
     bal = db.get_balance(api_key)
-    return {"api_key": api_key, "balance": bal, "can_generate": int(bal / PRICE_PER_WALLET) if bal >= PRICE_PER_WALLET else 0}
+    return {
+        "api_key": api_key,
+        "balance": bal,
+        "can_generate": int(bal / PRICE_PER_WALLET) if bal >= PRICE_PER_WALLET else 0,
+    }
 
 
 @router.get("/public-key")
@@ -507,12 +603,13 @@ async def marketplace_public_key():
     and persisted to disk.
     """
     from core.proof import get_receipt_public_key
+
     return {
         "algorithm": "Ed25519",
         "public_key": get_receipt_public_key(),
         "purpose": "Order receipt signing for x402 marketplace",
         "generated_at": "first_startup",
-        "verify_tool": "pip install pynacl && python3 -c \"from nacl.bindings import crypto_sign_open; import base64; ...\"",
+        "verify_tool": 'pip install pynacl && python3 -c "from nacl.bindings import crypto_sign_open; import base64; ..."',
     }
 
 
@@ -523,7 +620,8 @@ async def verify_receipt(order_id: str, signature: str = "", pubkey: str = ""):
     Pass the order_id, signature, and public key from the order response.
     Returns whether the signature is valid.
     """
-    from core.proof import verify_receipt as _verify, get_receipt_public_key
+    from core.proof import get_receipt_public_key, verify_receipt as _verify
+
     db = get_db()
     conn = db._conn()
     row = conn.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
@@ -531,7 +629,15 @@ async def verify_receipt(order_id: str, signature: str = "", pubkey: str = ""):
     if not row:
         raise HTTPException(status_code=404, detail="Order not found")
     pubkey = pubkey or get_receipt_public_key()
-    valid = _verify(order_id, row["chain"], row["count"], row["amount_usd"], row["created_at"], signature, pubkey)
+    valid = _verify(
+        order_id,
+        row["chain"],
+        row["count"],
+        row["amount_usd"],
+        row["created_at"],
+        signature,
+        pubkey,
+    )
     return {
         "order_id": order_id,
         "valid": valid,
@@ -551,6 +657,7 @@ async def transparency():
     This endpoint proves we are who we say we are. No secrets here.
     """
     from core.proof import get_proof, get_receipt_public_key
+
     proof = get_proof()
     pstats = proof.stats()
     roots = proof.get_roots(20)
@@ -599,16 +706,18 @@ async def transparency():
 # ═══════════════════════════════════════════════════════════════════
 
 
-def _generate_wallets_sync(chain: str, count: int, order_id: str,
-                           derivation_path: str = "", xpub: str = "") -> list[dict]:
+def _generate_wallets_sync(
+    chain: str, count: int, order_id: str, derivation_path: str = "", xpub: str = ""
+) -> list[dict]:
     """Generate wallets synchronously (runs in background thread for async jobs)."""
     generator = get_generator()
     wallets = []
     if xpub:
         from bip_utils import Bip32Secp256k1, Bip32Slip10Ed25519
+
         chain_info = CHAINS.get(chain)
         if chain_info:
-            try:
+            with suppress(Exception):
                 if chain_info.curve == "ed25519":
                     bip32_ctx = Bip32Slip10Ed25519.FromXPub(xpub)
                 else:
@@ -617,29 +726,47 @@ def _generate_wallets_sync(chain: str, count: int, order_id: str,
                     child_path = f"0/{i}"
                     child_key = bip32_ctx.DerivePath(child_path)
                     pub_bytes = child_key.PublicKey().Raw().ToBytes()
-                    wallets.append({
-                        "index": i + 1, "address": pub_bytes.hex()[:40],
-                        "private_key": "", "mnemonic": "",
-                        "derivation_path": child_path, "derivation_method": "xpub",
-                    })
-            except Exception:
-                pass
+                    wallets.append(
+                        {
+                            "index": i + 1,
+                            "address": pub_bytes.hex()[:40],
+                            "private_key": "",
+                            "mnemonic": "",
+                            "derivation_path": child_path,
+                            "derivation_method": "xpub",
+                        }
+                    )
     else:
         for i in range(count):
-            gen_kwargs = {"chain_key": chain, "label": f"x402_{order_id}_{i}", "tags": ["x402", order_id]}
+            gen_kwargs = {
+                "chain_key": chain,
+                "label": f"x402_{order_id}_{i}",
+                "tags": ["x402", order_id],
+            }
             if derivation_path:
                 gen_kwargs["derivation_path"] = derivation_path
             wallet = generator.generate(**gen_kwargs)
-            wallets.append({
-                "index": i + 1, "address": wallet.address,
-                "private_key": wallet.private_key_hex, "mnemonic": wallet.mnemonic,
-                "derivation_path": wallet.derivation_path,
-            })
+            wallets.append(
+                {
+                    "index": i + 1,
+                    "address": wallet.address,
+                    "private_key": wallet.private_key_hex,
+                    "mnemonic": wallet.mnemonic,
+                    "derivation_path": wallet.derivation_path,
+                }
+            )
     return wallets
 
 
-def _run_async_job(job_id: str, chain: str, count: int, order_id: str,
-                   derivation_path: str, xpub: str, webhook_url: str = ""):
+def _run_async_job(
+    job_id: str,
+    chain: str,
+    count: int,
+    order_id: str,
+    derivation_path: str,
+    xpub: str,
+    webhook_url: str = "",
+):
     """Background worker for async generation jobs."""
     try:
         wallets = _generate_wallets_sync(chain, count, order_id, derivation_path, xpub)
@@ -647,14 +774,21 @@ def _run_async_job(job_id: str, chain: str, count: int, order_id: str,
             _jobs[job_id] = {"status": "completed", "wallets": wallets, "completed_at": time.time()}
         if webhook_url:
             import httpx
-            try:
-                httpx.post(webhook_url, json={
-                    "event": "job.completed", "job_id": job_id,
-                    "order_id": order_id, "chain": chain, "count": count,
-                    "wallets": wallets,
-                }, timeout=15)
-            except Exception:
-                pass
+
+            # Fire-and-forget webhook delivery; failures must not fail the job.
+            with suppress(Exception):
+                httpx.post(
+                    webhook_url,
+                    json={
+                        "event": "job.completed",
+                        "job_id": job_id,
+                        "order_id": order_id,
+                        "chain": chain,
+                        "count": count,
+                        "wallets": wallets,
+                    },
+                    timeout=15,
+                )
     except Exception as e:
         with _jobs_lock:
             _jobs[job_id] = {"status": "failed", "error": str(e), "completed_at": time.time()}
@@ -680,7 +814,9 @@ async def generate_async(req: GenerateRequest, request: Request):
     if req.idempotency_key:
         db = get_db()
         conn = db._conn()
-        existing = conn.execute("SELECT * FROM orders WHERE idempotency_key = ?", (req.idempotency_key,)).fetchone()
+        existing = conn.execute(
+            "SELECT * FROM orders WHERE idempotency_key = ?", (req.idempotency_key,)
+        ).fetchone()
         conn.close()
         if existing:
             return {"idempotent": True, "order_id": existing["order_id"]}
@@ -695,12 +831,25 @@ async def generate_async(req: GenerateRequest, request: Request):
             db.deduct(req.api_key, total)
             payment_method = "credits"
         else:
-            raise HTTPException(status_code=402, detail={"error": "Insufficient credits", "balance": bal, "required": total})
+            raise HTTPException(
+                status_code=402,
+                detail={"error": "Insufficient credits", "balance": bal, "required": total},
+            )
     elif total >= MIN_ORDER_USD and not req.payment_tx:
         from core.x402_verify import get_pay_to
-        raise HTTPException(status_code=402, detail={"error": "Payment required", "amount_usd": total, "pay_to": get_pay_to(chain), "chain": chain})
+
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "Payment required",
+                "amount_usd": total,
+                "pay_to": get_pay_to(chain),
+                "chain": chain,
+            },
+        )
     elif total >= MIN_ORDER_USD and req.payment_tx:
         from core.x402_verify import verify_usdc_payment
+
         result = await verify_usdc_payment(chain, req.payment_tx, total)
         if not result["verified"]:
             raise HTTPException(status_code=402, detail=f"Payment failed: {result['reason']}")
@@ -709,12 +858,24 @@ async def generate_async(req: GenerateRequest, request: Request):
         payment_method = "free"
 
     db = get_db()
-    db.log_order(order_id, chain, count, total, req.payment_tx or "free", bot_ip, req.idempotency_key or "")
+    db.log_order(
+        order_id, chain, count, total, req.payment_tx or "free", bot_ip, req.idempotency_key or ""
+    )
 
     with _jobs_lock:
-        _jobs[job_id] = {"status": "queued", "order_id": order_id, "chain": chain, "count": count, "created_at": time.time()}
+        _jobs[job_id] = {
+            "status": "queued",
+            "order_id": order_id,
+            "chain": chain,
+            "count": count,
+            "created_at": time.time(),
+        }
 
-    thread = threading.Thread(target=_run_async_job, args=(job_id, chain, count, order_id, req.derivation_path, req.xpub, ""), daemon=True)
+    thread = threading.Thread(
+        target=_run_async_job,
+        args=(job_id, chain, count, order_id, req.derivation_path, req.xpub, ""),
+        daemon=True,
+    )
     thread.start()
 
     return {
@@ -756,7 +917,9 @@ def _refill_warm_pool():
                 wallets = _generate_wallets_sync(chain, needed, f"warmpool_{chain}")
                 with _WARM_POOL_LOCK:
                     _WARM_POOL.setdefault(chain, []).extend(wallets)
-                    logger.info(f"Warm pool refilled: {chain} +{needed} (total {len(_WARM_POOL[chain])})")
+                    logger.info(
+                        f"Warm pool refilled: {chain} +{needed} (total {len(_WARM_POOL[chain])})"
+                    )
 
 
 def _pull_from_warm_pool(chain: str, count: int) -> list[dict]:
@@ -794,10 +957,11 @@ async def set_webhook(api_key: str = Body(...), url: str = Body(...)):
     The payload is HMAC-SHA256 signed with your API key as the secret.
     """
     from core.webhooks import validate_webhook_url
+
     try:
         validate_webhook_url(url)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     with _api_webhooks_lock:
         _api_webhooks[api_key[:16]] = url
     return {"webhook_set": True, "api_key": api_key[:16] + "...", "url": url}
@@ -828,7 +992,10 @@ class MultiSigRequest(BaseModel):
     chain: str = Field(default="eth")
     required: int = Field(default=2, ge=1, le=10, description="Required signatures (M)")
     total_keys: int = Field(default=3, ge=1, le=10, description="Total signers (N)")
-    public_keys: list[str] = Field(default_factory=list, description="Optional: provide your own public keys. Empty = we generate.")
+    public_keys: list[str] = Field(
+        default_factory=list,
+        description="Optional: provide your own public keys. Empty = we generate.",
+    )
 
 
 @router.post("/multi-sig")
@@ -845,7 +1012,9 @@ async def generate_multisig(req: MultiSigRequest, request: Request):
     if not chain_info:
         raise HTTPException(status_code=400, detail=f"Unsupported: {chain}")
     if req.required > req.total_keys:
-        raise HTTPException(status_code=400, detail="Required signatures (M) cannot exceed total keys (N)")
+        raise HTTPException(
+            status_code=400, detail="Required signatures (M) cannot exceed total keys (N)"
+        )
 
     public_keys = list(req.public_keys)
     if not public_keys:
@@ -855,15 +1024,19 @@ async def generate_multisig(req: MultiSigRequest, request: Request):
             public_keys.append(wallet.public_key_hex)
 
     if len(public_keys) < req.total_keys:
-        raise HTTPException(status_code=400, detail=f"Need {req.total_keys} public keys, got {len(public_keys)}")
+        raise HTTPException(
+            status_code=400, detail=f"Need {req.total_keys} public keys, got {len(public_keys)}"
+        )
 
     sorted_keys = sorted(public_keys)
     from Crypto.Hash import keccak
+
     k = keccak.new(digest_bits=256)
     for pk in sorted_keys:
         k.update(bytes.fromhex(pk[2:] if pk.startswith("04") else pk))
     address = "0x" + k.digest()[-20:].hex()
     from wallet_engine.generator import _to_eip55_checksum
+
     address = _to_eip55_checksum(address)
 
     return {
@@ -909,9 +1082,13 @@ async def generate_sharded(req: ShardRequest, request: Request):
 
     try:
         from secretsharing import SecretSharer
+
         shards = SecretSharer.split_secret(wallet.private_key_hex, req.total_shards, req.threshold)
     except ImportError:
-        raise HTTPException(status_code=501, detail="Secret sharing library not installed. Install: pip install secretsharing")
+        raise HTTPException(
+            status_code=501,
+            detail="Secret sharing library not installed. Install: pip install secretsharing",
+        ) from None
 
     wallet.clear_sensitive()
 
@@ -955,33 +1132,56 @@ async def export_order(req: ExportRequest, request: Request):
         raise HTTPException(status_code=404, detail="Order not found")
 
     with _jobs_lock:
-        job = next((j for j in _jobs.values() if j.get("order_id") == req.order_id and j["status"] == "completed"), None)
+        job = next(
+            (
+                j
+                for j in _jobs.values()
+                if j.get("order_id") == req.order_id and j["status"] == "completed"
+            ),
+            None,
+        )
     if not job:
-        raise HTTPException(status_code=404, detail="Order wallets not found (may still be processing)")
+        raise HTTPException(
+            status_code=404, detail="Order wallets not found (may still be processing)"
+        )
 
     wallets = job.get("wallets", [])
 
     if req.format == "csv":
         import csv as _csv
+
         buf = io.StringIO()
         w = _csv.writer(buf)
         w.writerow(["index", "chain", "address", "private_key", "derivation_path"])
         for wl in wallets:
-            w.writerow([wl["index"], row["chain"], wl["address"], wl.get("private_key", ""), wl.get("derivation_path", "")])
-        return Response(content=buf.getvalue(), media_type="text/csv",
-                        headers={"Content-Disposition": f'attachment; filename="wallets_{req.order_id}.csv"'})
+            w.writerow(
+                [
+                    wl["index"],
+                    row["chain"],
+                    wl["address"],
+                    wl.get("private_key", ""),
+                    wl.get("derivation_path", ""),
+                ]
+            )
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="wallets_{req.order_id}.csv"'},
+        )
 
     if req.format == "keystore":
         keystores = []
         for wl in wallets:
             if wl.get("private_key"):
                 pw = secrets.token_hex(16)
-                keystores.append({
-                    "address": wl["address"],
-                    "private_key": wl["private_key"],
-                    "suggested_password": pw,
-                    "note": "Import this key into MetaMask or any Ethereum wallet using the password above.",
-                })
+                keystores.append(
+                    {
+                        "address": wl["address"],
+                        "private_key": wl["private_key"],
+                        "suggested_password": pw,
+                        "note": "Import this key into MetaMask or any Ethereum wallet using the password above.",
+                    }
+                )
         return keystores
 
     return {"format": "json", "order_id": req.order_id, "wallets": wallets}
@@ -1005,18 +1205,24 @@ async def verify_batch(wallet_ids: list[str] = Body(...)):
         try:
             attest = proof.get_attestation(wid)
             if attest:
-                results.append({
-                    "wallet_id": wid,
-                    "attested": True,
-                    "leaf_hash": attest.get("leaf_hash", ""),
-                    "root_hash": attest.get("root_hash", ""),
-                    "created_at": attest.get("created_at"),
-                })
+                results.append(
+                    {
+                        "wallet_id": wid,
+                        "attested": True,
+                        "leaf_hash": attest.get("leaf_hash", ""),
+                        "root_hash": attest.get("root_hash", ""),
+                        "created_at": attest.get("created_at"),
+                    }
+                )
             else:
                 results.append({"wallet_id": wid, "attested": False})
         except Exception:
             results.append({"wallet_id": wid, "attested": False, "error": "Verification failed"})
-    return {"verified": sum(1 for r in results if r["attested"]), "total": len(wallet_ids), "results": results}
+    return {
+        "verified": sum(1 for r in results if r["attested"]),
+        "total": len(wallet_ids),
+        "results": results,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1045,7 +1251,9 @@ async def sla():
     db = get_db()
     conn = db._conn()
     total_orders = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
-    recent_orders = conn.execute("SELECT order_id, chain, count, amount_usd, created_at, status FROM orders ORDER BY created_at DESC LIMIT 10").fetchall()
+    recent_orders = conn.execute(
+        "SELECT order_id, chain, count, amount_usd, created_at, status FROM orders ORDER BY created_at DESC LIMIT 10"
+    ).fetchall()
     conn.close()
 
     return {
@@ -1074,7 +1282,9 @@ class TimelockRequest(BaseModel):
     chain: str = Field(default="sol")
     count: int = Field(default=1, ge=1, le=1000)
     release_at: float = Field(..., description="Unix timestamp when keys should be released")
-    auth_signature: str = Field(default="", description="Optional: second auth signature for release")
+    auth_signature: str = Field(
+        default="", description="Optional: second auth signature for release"
+    )
     webhook_url: str = Field(default="", description="Webhook to POST keys to when released")
 
 
@@ -1101,13 +1311,15 @@ async def create_timelock(req: TimelockRequest, request: Request):
     wallets = []
     for i in range(req.count):
         wallet = generator.generate(chain, label=f"timelock_{i}", tags=["timelock"])
-        wallets.append({
-            "index": i + 1,
-            "address": wallet.address,
-            "private_key": wallet.private_key_hex,
-            "mnemonic": wallet.mnemonic,
-            "derivation_path": wallet.derivation_path,
-        })
+        wallets.append(
+            {
+                "index": i + 1,
+                "address": wallet.address,
+                "private_key": wallet.private_key_hex,
+                "mnemonic": wallet.mnemonic,
+                "derivation_path": wallet.derivation_path,
+            }
+        )
 
     lock_id = f"tl_{secrets.token_hex(8)}"
     with _timelocks_lock:
@@ -1122,7 +1334,10 @@ async def create_timelock(req: TimelockRequest, request: Request):
             "released": False,
         }
 
-    safe_wallets = [{"index": w["index"], "address": w["address"], "derivation_path": w["derivation_path"]} for w in wallets]
+    safe_wallets = [
+        {"index": w["index"], "address": w["address"], "derivation_path": w["derivation_path"]}
+        for w in wallets
+    ]
     return {
         "timelock_id": lock_id,
         "chain": chain,
@@ -1153,7 +1368,11 @@ async def get_timelock(lock_id: str, auth_signature: str = ""):
         }
 
     if lock.get("auth_signature") and auth_signature != lock["auth_signature"]:
-        return {"timelock_id": lock_id, "locked": True, "error": "Auth signature required to release keys"}
+        return {
+            "timelock_id": lock_id,
+            "locked": True,
+            "error": "Auth signature required to release keys",
+        }
 
     with _timelocks_lock:
         lock["released"] = True
@@ -1173,7 +1392,8 @@ async def publish_proof(order_id: str = Body(...)):
     address hash, key deletion signature, and Merkle root.
     Anyone can audit: "Order X was fulfilled, keys were not stored."
     """
-    from core.proof import get_proof, sign_key_deletion, get_receipt_public_key
+    from core.proof import get_proof, get_receipt_public_key, sign_key_deletion
+
     db = get_db()
     conn = db._conn()
     row = conn.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
@@ -1182,7 +1402,14 @@ async def publish_proof(order_id: str = Body(...)):
         raise HTTPException(status_code=404, detail="Order not found")
 
     with _jobs_lock:
-        job = next((j for j in _jobs.values() if j.get("order_id") == order_id and j["status"] == "completed"), None)
+        job = next(
+            (
+                j
+                for j in _jobs.values()
+                if j.get("order_id") == order_id and j["status"] == "completed"
+            ),
+            None,
+        )
     addresses = [w["address"] for w in (job.get("wallets", []) if job else [])]
 
     deletion_sig = sign_key_deletion(order_id, row["chain"], row["count"], addresses)
@@ -1192,27 +1419,36 @@ async def publish_proof(order_id: str = Body(...)):
 
     key_path = os.getenv("WP_POF_ARWEAVE_KEY_PATH", "")
     if not key_path:
-        return {"published": False, "reason": "Arweave key not configured (WP_POF_ARWEAVE_KEY_PATH)"}
+        return {
+            "published": False,
+            "reason": "Arweave key not configured (WP_POF_ARWEAVE_KEY_PATH)",
+        }
 
     try:
         import json as j
-        wallet = j.loads(Path(key_path).read_text())
+
+        wallet = j.loads(await asyncio.to_thread(Path(key_path).read_text))
         from ar import Arweave
+
         ar = Arweave(wallet)
-        data = j.dumps({
-            "p": "walletpress-non-storage-proof",
-            "v": "1",
-            "order_id": order_id,
-            "chain": row["chain"],
-            "count": row["count"],
-            "amount_usd": row["amount_usd"],
-            "address_hash": hashlib.sha256("".join(sorted(addresses)).encode()).hexdigest()[:16],
-            "key_deletion_signature": deletion_sig,
-            "receipt_public_key": get_receipt_public_key(),
-            "merkle_root": roots[0]["root_hash"] if roots else "",
-            "merkle_leaf_count": pstats["total_attestations"],
-            "ts": time.time(),
-        })
+        data = j.dumps(
+            {
+                "p": "walletpress-non-storage-proof",
+                "v": "1",
+                "order_id": order_id,
+                "chain": row["chain"],
+                "count": row["count"],
+                "amount_usd": row["amount_usd"],
+                "address_hash": hashlib.sha256("".join(sorted(addresses)).encode()).hexdigest()[
+                    :16
+                ],
+                "key_deletion_signature": deletion_sig,
+                "receipt_public_key": get_receipt_public_key(),
+                "merkle_root": roots[0]["root_hash"] if roots else "",
+                "merkle_leaf_count": pstats["total_attestations"],
+                "ts": time.time(),
+            }
+        )
         tx = ar.create_transaction(data)
         tx.sign(wallet)
         tx.send()
@@ -1257,13 +1493,16 @@ async def free_generation(chain: str = "sol", request: Request = None):
         key = f"{client_ip}:{today}"
         used = _free_tier_buckets.get(key, 0)
         if used >= _FREE_DAILY_LIMIT:
-            raise HTTPException(status_code=429, detail={
-                "error": "Free tier limit reached",
-                "limit": _FREE_DAILY_LIMIT,
-                "used": used,
-                "resets_in_hours": 24 - (time.time() % 86400) / 3600,
-                "upgrade": "Buy credits at POST /api/v1/marketplace/credits",
-            })
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "Free tier limit reached",
+                    "limit": _FREE_DAILY_LIMIT,
+                    "used": used,
+                    "resets_in_hours": 24 - (time.time() % 86400) / 3600,
+                    "upgrade": "Buy credits at POST /api/v1/marketplace/credits",
+                },
+            )
         _free_tier_buckets[key] = used + 1
 
     generator = get_generator()

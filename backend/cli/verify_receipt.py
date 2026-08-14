@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+
 """WalletPress Receipt Verifier — CLI tool to verify x402 order receipts.
 
 Usage:

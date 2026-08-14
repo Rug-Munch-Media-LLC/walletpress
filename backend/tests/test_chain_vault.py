@@ -1,4 +1,5 @@
 """Integration tests: chain-vault API endpoints."""
+
 import pytest
 
 
@@ -29,7 +30,7 @@ def test_list_chains(client):
     resp = client.get("/api/v1/chain-vault/chains")
     assert resp.status_code == 200
     data = resp.json()
-    chains = data if isinstance(data, dict) and "chains" in data else data
+    chains = data
     assert len(chains) > 0
 
 
@@ -43,9 +44,14 @@ def test_get_stats(client, admin_headers):
 
 @pytest.mark.parametrize("chain", ["eth", "sol", "btc", "trx", "base", "polygon", "bsc"])
 def test_generate_wallet(client, admin_headers, chain):
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": chain, "count": 1,
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": chain,
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     if resp.status_code in (400, 402):
         pytest.skip(f"{chain}: {resp.json().get('detail', resp.json())}")
     assert resp.status_code == 200, f"{chain}: {resp.json()}"
@@ -55,9 +61,14 @@ def test_generate_wallet(client, admin_headers, chain):
 
 
 def test_generate_batch(client, admin_headers):
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 3,
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 3,
+        },
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["generated"] == 3
@@ -65,9 +76,14 @@ def test_generate_batch(client, admin_headers):
 
 
 def test_generate_all(client, admin_headers):
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "all", "count": 1,
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "all",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     if resp.status_code == 402:
         pytest.skip("License tier blocks 'all' chains")
     assert resp.status_code == 200
@@ -76,17 +92,28 @@ def test_generate_all(client, admin_headers):
 
 
 def test_generate_with_qr(client, admin_headers):
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1, "include_qr": True,
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+            "include_qr": True,
+        },
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
 
 
 def test_from_mnemonic(client, admin_headers):
     mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-    resp = client.post("/api/v1/chain-vault/derive-address", json={
-        "mnemonic": mnemonic, "chain": "eth",
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/derive-address",
+        json={
+            "mnemonic": mnemonic,
+            "chain": "eth",
+        },
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["chain"] == "eth"
@@ -95,9 +122,14 @@ def test_from_mnemonic(client, admin_headers):
 
 
 def test_vault_list(client, admin_headers):
-    client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
+    client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     resp = client.get("/api/v1/chain-vault/vault", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -106,9 +138,14 @@ def test_vault_list(client, admin_headers):
 
 
 def test_vault_get(client, admin_headers):
-    gen = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
+    gen = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     wallet_id = gen.json()["wallets"][0]["id"]
     resp = client.get(f"/api/v1/chain-vault/vault/{wallet_id}", headers=admin_headers)
     assert resp.status_code == 200
@@ -119,9 +156,14 @@ def test_vault_get(client, admin_headers):
 
 
 def test_vault_get_full(client, admin_headers):
-    gen = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
+    gen = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     wallet_id = gen.json()["wallets"][0]["id"]
     resp = client.get(f"/api/v1/chain-vault/vault/{wallet_id}/full", headers=admin_headers)
     assert resp.status_code == 200
@@ -131,7 +173,10 @@ def test_vault_get_full(client, admin_headers):
 
 
 def test_validate_address(client, admin_headers):
-    resp = client.get("/api/v1/chain-vault/validate/eth/0xd8da6bf26964af9d7eed9e03e53415d37aa96045", headers=admin_headers)
+    resp = client.get(
+        "/api/v1/chain-vault/validate/eth/0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["valid"] is True
@@ -140,16 +185,24 @@ def test_validate_address(client, admin_headers):
 
 
 def test_validate_all(client, admin_headers):
-    resp = client.get("/api/v1/chain-vault/validate/all?address=0xd8da6bf26964af9d7eed9e03e53415d37aa96045", headers=admin_headers)
+    resp = client.get(
+        "/api/v1/chain-vault/validate/all?address=0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert "possible_chains" in data or "results" in data or isinstance(data.get("address"), str)
 
 
 def test_wallet_tree(client, admin_headers):
-    client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
+    client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     resp = client.get("/api/v1/chain-vault/tree", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -160,9 +213,14 @@ def test_wallet_tree(client, admin_headers):
 
 def test_derive_address(client, admin_headers):
     mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-    resp = client.post("/api/v1/chain-vault/derive-address", json={
-        "mnemonic": mnemonic, "chain": "eth",
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/derive-address",
+        json={
+            "mnemonic": mnemonic,
+            "chain": "eth",
+        },
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["chain"] == "eth"
@@ -171,9 +229,14 @@ def test_derive_address(client, admin_headers):
 
 
 def test_api_keys_crud(client, admin_headers):
-    create = client.post("/api/v1/chain-vault/api-keys", json={
-        "label": "test-key", "scopes": ["wallet.read"],
-    }, headers=admin_headers)
+    create = client.post(
+        "/api/v1/chain-vault/api-keys",
+        json={
+            "label": "test-key",
+            "scopes": ["wallet.read"],
+        },
+        headers=admin_headers,
+    )
     assert create.status_code == 200
     key_data = create.json()
     assert "api_key_id" in key_data
@@ -187,7 +250,9 @@ def test_api_keys_crud(client, admin_headers):
 
 
 def test_team_keys_crud(client, admin_headers):
-    create = client.post("/api/v1/team/keys?label=test-team-key&role=operator", headers=admin_headers)
+    create = client.post(
+        "/api/v1/team/keys?label=test-team-key&role=operator", headers=admin_headers
+    )
     assert create.status_code == 200
     key_data = create.json()
     assert "key_id" in key_data
@@ -200,9 +265,14 @@ def test_team_keys_crud(client, admin_headers):
 
 
 def test_delete_wallet(client, admin_headers):
-    gen = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
+    gen = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     wallet_id = gen.json()["wallets"][0]["id"]
     resp = client.delete(f"/api/v1/chain-vault/vault/{wallet_id}", headers=admin_headers)
     assert resp.status_code == 200
@@ -218,33 +288,53 @@ def test_auth_required_for_mutations(client):
 
 def test_invalid_api_key_rejected(client):
     bad_headers = {"X-API-Key": "this-key-is-wrong"}
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=bad_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=bad_headers,
+    )
     assert resp.status_code in (401, 403)
 
 
 def test_unsupported_chain_returns_error(client, admin_headers):
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "nonexistent", "count": 1,
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "nonexistent",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     # License check may return 402 before chain validation, or 400 if chain is invalid
     assert resp.status_code in (400, 402)
 
 
 def test_empty_label_generates_default(client, admin_headers):
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["wallets"][0]["label"] != ""
 
 
 def test_generate_multiple_wallets(client, admin_headers):
-    resp = client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 5,
-    }, headers=admin_headers)
+    resp = client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 5,
+        },
+        headers=admin_headers,
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["generated"] == 5
@@ -255,9 +345,14 @@ def test_generate_multiple_wallets(client, admin_headers):
 
 
 def test_retention_portfolio(client, admin_headers):
-    client.post("/api/v1/chain-vault/generate", json={
-        "chain": "eth", "count": 1,
-    }, headers=admin_headers)
+    client.post(
+        "/api/v1/chain-vault/generate",
+        json={
+            "chain": "eth",
+            "count": 1,
+        },
+        headers=admin_headers,
+    )
     resp = client.get("/api/v1/portfolio", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -285,4 +380,4 @@ def test_test_vectors(client, admin_headers):
     resp = client.get("/api/v1/test-vectors", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert isinstance(data, dict) or isinstance(data, list)
+    assert isinstance(data, (dict, list))

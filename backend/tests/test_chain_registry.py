@@ -117,7 +117,7 @@ def test_get_chains_for_tier():
     for tier_name in TIERS:
         chains = get_chains_for_tier(tier_name)
         assert len(chains) > 0, f"Tier '{tier_name}' returned no chains"
-        for key, info in chains.items():
+        for _, info in chains.items():
             assert isinstance(info, ChainInfo)
 
 

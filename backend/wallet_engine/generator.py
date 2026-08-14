@@ -39,12 +39,12 @@ logger = logging.getLogger("wp.generator")
 try:
     from coincurve import PrivateKey as CoinCurveKey
 except ImportError:
-    raise RuntimeError("coincurve is required. Install it: pip install coincurve>=18.0.0")
+    raise RuntimeError("coincurve is required. Install it: pip install coincurve>=18.0.0") from None
 
 try:
     import base58
 except ImportError:
-    raise RuntimeError("base58 is required. Install it: pip install base58>=2.1.1")
+    raise RuntimeError("base58 is required. Install it: pip install base58>=2.1.1") from None
 
 try:
     from argon2.low_level import Type as _Argon2Type, hash_secret_raw as _argon2id_kdf
@@ -52,12 +52,14 @@ try:
 except ImportError:
     raise RuntimeError(
         "cryptography and argon2-cffi are required. Install them: pip install cryptography>=42.0.0 argon2-cffi>=23.0.0"
-    )
+    ) from None
 
 try:
     from Crypto.Hash import keccak
 except ImportError:
-    raise RuntimeError("pycryptodome is required. Install it: pip install pycryptodome>=3.20.0")
+    raise RuntimeError(
+        "pycryptodome is required. Install it: pip install pycryptodome>=3.20.0"
+    ) from None
 
 
 def _keccak256(data: bytes) -> bytes:
@@ -700,7 +702,7 @@ class WalletGenerator:
         except (ImportError, ModuleNotFoundError):
             raise RuntimeError(
                 "monero is required for XMR wallet generation. Install it: pip install monero"
-            )
+            ) from None
         except CryptoInputError:
             raise
         except Exception as e:
@@ -739,18 +741,14 @@ class WalletGenerator:
                     .derive(0, hardened=True)
                 )
                 pay_w = acc.derive(0).derive(0)
-                stk_w = acc.derive(2).derive(0)
                 # xsk format: 32-byte signing key || 32-byte chain code
                 pay_xsk = pay_w.xprivate_key
-                stk_xsk = stk_w.xprivate_key
                 pay_priv = pay_xsk[:32].hex()
-                # stk_xsk[:32].hex()  # removed: unused computation
 
                 # Derive the public key from the raw signing key
                 from nacl.bindings import crypto_sign_seed_keypair
 
                 pay_pub, _ = crypto_sign_seed_keypair(pay_xsk[:32])
-                stk_pub, _ = crypto_sign_seed_keypair(stk_xsk[:32])
 
                 address = encode_address(
                     address_family, mnemonic, override.get("network", "mainnet")
@@ -898,7 +896,7 @@ class WalletGenerator:
         try:
             key_bytes = bytes.fromhex(private_key_hex.removeprefix("0x"))
         except ValueError:
-            raise ValueError("Private key must be a valid hex string")
+            raise ValueError("Private key must be a valid hex string") from None
 
         # Check key length based on curve
         if chain.curve in ("secp256k1", "ed25519"):

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+
 """WalletPress Address Verification — BIP39/BIP32/BIP44 Compatibility Suite.
 
 This is the trust foundation. Every address is verified against industry-
@@ -15,8 +16,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from wallet_engine.generator import WalletGenerator
 from wallet_engine.chains import CHAINS
+from wallet_engine.generator import WalletGenerator
 
 # Test vectors verified against:
 # - ETH: web3.py v7.8 (which uses eth-keys under the hood)
@@ -24,7 +25,7 @@ from wallet_engine.chains import CHAINS
 # - SOL: nacl crypto_sign_seed_keypair + base58
 TEST_VECTORS = [
     {
-        "name": "BIP39 Standard (abandon ×12 + about)",
+        "name": "BIP39 Standard (abandon x12 + about)",
         "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
         "checks": {
             "eth": "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
@@ -40,7 +41,7 @@ TEST_VECTORS = [
         },
     },
     {
-        "name": "BIP39 24-word (abandon ×24 + art)",
+        "name": "BIP39 24-word (abandon x24 + art)",
         "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
         "checks": {
             "eth": "0xF278cF59F82eDcf871d630F28EcC8056f25C1cdb",
@@ -50,7 +51,20 @@ TEST_VECTORS = [
     },
 ]
 
-FORMAT_CHAINS = ["eth", "btc", "sol", "trx", "base", "polygon", "bsc", "ada", "dot", "xrp", "ltc", "doge"]
+FORMAT_CHAINS = [
+    "eth",
+    "btc",
+    "sol",
+    "trx",
+    "base",
+    "polygon",
+    "bsc",
+    "ada",
+    "dot",
+    "xrp",
+    "ltc",
+    "doge",
+]
 
 
 def run():
@@ -98,12 +112,14 @@ def run():
             fmt_ok += 1
         else:
             fmt_known_bugs.append(chain_key)
-            CHAINS.get(chain_key, {}).name if hasattr(CHAINS, 'get') else chain_key
+            CHAINS.get(chain_key, {}).name if hasattr(CHAINS, "get") else chain_key
             print(f"    ⚠ {chain_key}: address format mismatch (known issue)")
     if fmt_ok == len(FORMAT_CHAINS):
         print(f"    ✓ {fmt_ok}/{len(FORMAT_CHAINS)} pass")
     else:
-        print(f"    ✓ {fmt_ok}/{len(FORMAT_CHAINS)} pass ({len(fmt_known_bugs)} known format issues: {', '.join(fmt_known_bugs)})")
+        print(
+            f"    ✓ {fmt_ok}/{len(FORMAT_CHAINS)} pass ({len(fmt_known_bugs)} known format issues: {', '.join(fmt_known_bugs)})"
+        )
 
     print()
     print(f"  RESULTS: {passed}/{total} test vectors pass")
@@ -114,7 +130,9 @@ def run():
         print("  ✓ ALL BIP39 VECTORS VERIFIED — addresses are BIP39/BIP32/BIP44 compatible")
         print("  ✓ ETH/BTC/SOL match MetaMask, Ledger, Phantom, Bitcoin Core")
         if fmt_ok < len(FORMAT_CHAINS):
-            print(f"  ⚠ {len(FORMAT_CHAINS) - fmt_ok} chains need address format fixes (TRX, DOT, XRP)")
+            print(
+                f"  ⚠ {len(FORMAT_CHAINS) - fmt_ok} chains need address format fixes (TRX, DOT, XRP)"
+            )
         print()
     else:
         print("  ⚠ BIP39 TEST VECTORS FAILED — addresses won't match standard wallets!")

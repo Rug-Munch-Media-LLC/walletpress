@@ -8,9 +8,8 @@ os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_email_")
 
 import pytest
 
-from core.email_notify import EmailNotifier, EmailMessage, TEMPLATES, get_notifier
-from core.dependencies import get_vault, get_generator
-from core.config import cfg
+from core.dependencies import get_generator, get_vault
+from core.email_notify import TEMPLATES, EmailMessage, EmailNotifier, get_notifier
 
 
 class TestEmailNotifier:

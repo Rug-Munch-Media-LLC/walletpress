@@ -8,6 +8,7 @@ scheduler, and x402 modules.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 import threading
 import time
@@ -17,7 +18,7 @@ from typing import Any
 
 
 class _PooledConn:
-    __slots__ = ("conn", "last_used", "in_use")
+    __slots__ = ("conn", "in_use", "last_used")
 
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
@@ -39,11 +40,13 @@ class DbPool:
         self._max_size = max_size
         self._busy_timeout = busy_timeout
         self._lock = threading.Lock()
-        self._pool: Ordereddict[str, _PooledConn] = OrderedDict()
+        self._pool: OrderedDict[str, _PooledConn] = OrderedDict()
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
     def _new_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path), timeout=self._busy_timeout / 1000, check_same_thread=False)
+        conn = sqlite3.connect(
+            str(self._path), timeout=self._busy_timeout / 1000, check_same_thread=False
+        )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(f"PRAGMA busy_timeout={self._busy_timeout}")
@@ -89,10 +92,8 @@ class DbPool:
 
             oldest_key = next(iter(self._pool.keys()))
             pc = self._pool[oldest_key]
-            try:
+            with contextlib.suppress(Exception):
                 pc.conn.close()
-            except Exception:
-                pass
             conn = self._new_conn()
             pc.conn = conn
             pc.in_use = True
@@ -111,10 +112,8 @@ class DbPool:
     def close_all(self) -> None:
         with self._lock:
             for pc in self._pool.values():
-                try:
+                with contextlib.suppress(Exception):
                     pc.conn.close()
-                except Exception:
-                    pass
             self._pool.clear()
 
 

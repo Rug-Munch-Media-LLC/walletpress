@@ -88,15 +88,15 @@ def _safe_crypto_call(operation_name: str, fn, *args, **kwargs):
         return fn(*args, **kwargs)
     except (CryptoInputError, ValueError) as e:
         logger.warning("Crypto input error in %s: %s", operation_name, e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except CryptoError as e:
         logger.error("Crypto operation failed in %s: %s", operation_name, e)
-        raise HTTPException(status_code=500, detail=f"Crypto operation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Crypto operation failed: {e}") from e
     except Exception as e:
         logger.exception("Unexpected error in %s: %s", operation_name, e)
         raise HTTPException(
             status_code=500, detail=f"Unexpected error during {operation_name}: {e}"
-        )
+        ) from e
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -131,7 +131,7 @@ async def list_chains():
             }
             for k, v in tier_chains.items()
         },
-        "groups": {name: chains for name, chains in CHAIN_GROUPS.items()},
+        "groups": dict(CHAIN_GROUPS.items()),
         "note": "All chains follow BIP44 standards. Verify with any wallet.",
     }
 
@@ -237,7 +237,7 @@ async def import_wallet(req: ImportRequest, request: Request):
         label=wallet.label,
         tags=wallet.tags,
         created_at=wallet.created_at,
-        encrypted_key=wallet.private_key_hex if wallet.encrypted else wallet.private_key_hex,
+        encrypted_key=wallet.private_key_hex,
         encrypted=wallet.encrypted,
     )
     vault.put(entry)
@@ -518,6 +518,6 @@ async def derive_address(req: DeriveRequest):
             "created_at": wallet.created_at,
         }
     except CryptoError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Derivation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Derivation failed: {e}") from e

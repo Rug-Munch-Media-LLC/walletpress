@@ -24,7 +24,7 @@ logger = logging.getLogger("wp.arweave")
 
 # Try to import arweave
 try:
-    from arweave import Wallet, Transaction
+    from arweave import Transaction, Wallet
     HAS_ARWEAVE = True
 except ImportError:
     HAS_ARWEAVE = False

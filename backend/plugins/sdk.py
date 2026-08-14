@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from typing import ClassVar
 
 logger = logging.getLogger("wp.plugins")
 
@@ -42,7 +43,7 @@ class WalletPressPlugin:
     description: str = ""
     version: str = "1.0.0"
     # Chain families this plugin works with
-    supported_chains: list[str] = ["evm", "solana"]
+    supported_chains: ClassVar[list[str]] = ["evm", "solana"]
 
     def tools(self) -> list[dict]:
         """Return the tools this plugin provides.
@@ -69,11 +70,9 @@ class WalletPressPlugin:
 
     def on_load(self):
         """Called when the plugin is loaded. Use for setup."""
-        pass
 
     def on_unload(self):
         """Called when the plugin is unloaded. Use for cleanup."""
-        pass
 
 
 # ── Plugin Registry ──────────────────────────────────────────────────────────
@@ -99,13 +98,15 @@ def list_plugins() -> list[dict]:
     """List all registered plugins with their tools."""
     result = []
     for name, plugin in _plugins.items():
-        result.append({
-            "name": name,
-            "description": plugin.description,
-            "version": plugin.version,
-            "supported_chains": plugin.supported_chains,
-            "tools": [t["name"] for t in plugin.tools()],
-        })
+        result.append(
+            {
+                "name": name,
+                "description": plugin.description,
+                "version": plugin.version,
+                "supported_chains": plugin.supported_chains,
+                "tools": [t["name"] for t in plugin.tools()],
+            }
+        )
     return result
 
 

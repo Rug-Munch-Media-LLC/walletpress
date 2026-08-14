@@ -18,13 +18,15 @@ import secrets
 import sqlite3
 import threading
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .config import cfg
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
 
 logger = logging.getLogger("wp.vault")
 
@@ -34,7 +36,7 @@ try:
 except ImportError:
     raise RuntimeError(
         "cryptography and argon2-cffi are required. Install them: pip install cryptography>=42.0.0 argon2-cffi>=23.0.0"
-    )
+    ) from None
 
 
 @dataclass
@@ -85,7 +87,7 @@ class Vault:
         )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=%d" % self.BUSY_TIMEOUT)
+        conn.execute(f"PRAGMA busy_timeout={self.BUSY_TIMEOUT}")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
@@ -210,13 +212,12 @@ class Vault:
 
     def put(self, wallet: WalletEntry) -> bool:
         with self._conn() as conn:
-            try:
-                try:
-                    conn.execute("ALTER TABLE wallets ADD COLUMN wallet_group TEXT DEFAULT ''")
-                    conn.commit()
-                except Exception:
-                    pass
+            # Idempotent migration: ignore "duplicate column" if already applied.
+            with suppress(Exception):
+                conn.execute("ALTER TABLE wallets ADD COLUMN wallet_group TEXT DEFAULT ''")
+                conn.commit()
 
+            try:
                 conn.execute(
                     """INSERT OR REPLACE INTO wallets
                     (id, chain, address, label, tags, wallet_group, created_at, encrypted_key,
@@ -293,15 +294,13 @@ class Vault:
             return [self._row_to_entry(r) for r in rows]
 
     def update_fts(self, wallet: WalletEntry):
-        with self._conn() as conn:
-            try:
-                conn.execute(
-                    "INSERT OR REPLACE INTO wallets_fts (id, chain, address, label, notes) VALUES (?, ?, ?, ?, ?)",
-                    (wallet.id, wallet.chain, wallet.address, wallet.label, wallet.notes),
-                )
-                conn.commit()
-            except Exception:
-                pass
+        """Refresh the FTS index for a wallet. Non-fatal if it fails."""
+        with self._conn() as conn, suppress(Exception):
+            conn.execute(
+                "INSERT OR REPLACE INTO wallets_fts (id, chain, address, label, notes) VALUES (?, ?, ?, ?, ?)",
+                (wallet.id, wallet.chain, wallet.address, wallet.label, wallet.notes),
+            )
+            conn.commit()
 
     def delete(self, wallet_id: str) -> bool:
         with self._conn() as conn:

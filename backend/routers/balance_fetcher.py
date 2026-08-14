@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 import httpx
+
 from core.config import cfg
 
 logger = logging.getLogger("wp.balances")

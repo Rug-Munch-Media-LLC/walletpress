@@ -8,11 +8,16 @@ import json
 import secrets
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 
 from .config import cfg
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from fastapi import Request
 
 
 @dataclass
@@ -25,7 +30,7 @@ class APIKey:
     last_used_at: float | None = None
     revoked: bool = False
     role: str = "operator"  # admin | operator | viewer
-    owner: str = ""        # team key owner (email or user_id)
+    owner: str = ""  # team key owner (email or user_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -33,9 +38,9 @@ class APIKey:
 # Used by require_role() dependency and require_auth_on_mutations.
 # ─────────────────────────────────────────────────────────────────────────────
 ROLE_HIERARCHY = {
-    "admin": 3,      # Full access, can manage keys
-    "operator": 2,   # Generate/manage wallets, view everything
-    "viewer": 1,     # Read-only
+    "admin": 3,  # Full access, can manage keys
+    "operator": 2,  # Generate/manage wallets, view everything
+    "viewer": 1,  # Read-only
 }
 
 
@@ -54,6 +59,7 @@ class KeyStore:
 
     def __init__(self, path: Path):
         import threading
+
         self._lock = threading.Lock()
         self.path = path
         self._keys: dict[str, APIKey] = {}
@@ -71,6 +77,7 @@ class KeyStore:
             except Exception as e:
                 # Don't lose keys on a corrupt file — log and continue
                 import logging
+
                 logging.getLogger("wp.auth").warning(f"KeyStore load failed: {e}")
 
     def _save(self):
@@ -171,7 +178,14 @@ class KeyStore:
 
     def list(self) -> list[dict]:
         return [
-            {"id": k.id, "label": k.label, "scopes": k.scopes, "created_at": k.created_at, "last_used_at": k.last_used_at, "revoked": k.revoked}
+            {
+                "id": k.id,
+                "label": k.label,
+                "scopes": k.scopes,
+                "created_at": k.created_at,
+                "last_used_at": k.last_used_at,
+                "revoked": k.revoked,
+            }
             for k in self._keys.values()
         ]
 
@@ -221,4 +235,5 @@ def require_scope(required: str = "wallet.read"):
             raise HTTPException(status_code=403, detail="Invalid or revoked API key")
         if required not in key.scopes and "admin" not in key.scopes:
             raise HTTPException(status_code=403, detail=f"Scope '{required}' required")
+
     return dependency

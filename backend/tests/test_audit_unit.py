@@ -2,7 +2,6 @@
 
 import os
 import tempfile
-import json
 from pathlib import Path
 
 os.environ["WP_VAULT_PASSWORD"] = "test-audit"

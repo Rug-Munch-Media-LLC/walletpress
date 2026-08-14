@@ -4,6 +4,7 @@ import os
 os.environ["WP_VAULT_PASSWORD"] = "test"
 
 from core.config import cfg
+
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
 from wallet_engine.chains import CHAINS, ChainFamily, validate_address

@@ -11,9 +11,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from core.config import cfg
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class PersistentStore:
@@ -27,6 +30,15 @@ class PersistentStore:
     """
 
     _db: sqlite3.Connection | None = None
+    # Allowlisted table names — never interpolate user input into SQL.
+    _TABLES = frozenset({"webhooks", "alerts", "payments"})
+
+    @classmethod
+    def _table(cls, table: str) -> str:
+        """Validate a table name against the allowlist before SQL interpolation."""
+        if table not in cls._TABLES:
+            raise ValueError(f"Unknown table: {table}")
+        return table
 
     @classmethod
     def _get_db(cls) -> sqlite3.Connection:
@@ -59,20 +71,25 @@ class PersistentStore:
     @classmethod
     def all(cls, table: str) -> list[dict]:
         db = cls._get_db()
-        rows = db.execute(f"SELECT data FROM {table} ORDER BY created_at DESC").fetchall()
+        rows = db.execute(
+            f"SELECT data FROM {cls._table(table)} ORDER BY created_at DESC"  # noqa: S608 — table validated against _TABLES allowlist
+        ).fetchall()
         return [json.loads(r["data"]) for r in rows]
 
     @classmethod
     def get(cls, table: str, item_id: str) -> dict | None:
         db = cls._get_db()
-        row = db.execute(f"SELECT data FROM {table} WHERE id = ?", (item_id,)).fetchone()
+        row = db.execute(
+            f"SELECT data FROM {cls._table(table)} WHERE id = ?",  # noqa: S608 — table validated against _TABLES allowlist
+            (item_id,),
+        ).fetchone()
         return json.loads(row["data"]) if row else None
 
     @classmethod
     def put(cls, table: str, item: dict) -> None:
         db = cls._get_db()
         db.execute(
-            f"INSERT OR REPLACE INTO {table} (id, data, created_at) VALUES (?, ?, ?)",
+            f"INSERT OR REPLACE INTO {cls._table(table)} (id, data, created_at) VALUES (?, ?, ?)",  # noqa: S608 — table validated against _TABLES allowlist
             (item["id"], json.dumps(item), item.get("created_at", time.time())),
         )
         db.commit()
@@ -80,13 +97,17 @@ class PersistentStore:
     @classmethod
     def delete(cls, table: str, item_id: str) -> None:
         db = cls._get_db()
-        db.execute(f"DELETE FROM {table} WHERE id = ?", (item_id,))
+        db.execute(
+            f"DELETE FROM {cls._table(table)} WHERE id = ?",  # noqa: S608 — table validated against _TABLES allowlist
+            (item_id,),
+        )
         db.commit()
 
     @classmethod
     def reload_webhooks(cls) -> None:
         """Reload webhooks from DB into the live deliverer on startup."""
         from core.webhooks import get_webhook_deliverer
+
         deliverer = get_webhook_deliverer()
         webhooks = cls.all("webhooks")
         for wh in webhooks:

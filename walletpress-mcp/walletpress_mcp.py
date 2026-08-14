@@ -45,6 +45,7 @@ else:
     _mode = "local"
     logger.info("Local mode: importing wallet engine")
     import sys
+
     backend_path = os.getenv("WALLETPRESS_BACKEND", "")
     if backend_path:
         sys.path.insert(0, backend_path)
@@ -54,6 +55,7 @@ def _call_backend(method: str, path: str, data: dict | None = None) -> dict:
     """Call the WalletPress backend (remote or local)."""
     if _mode == "remote":
         import httpx
+
         headers = {"X-API-Key": BACKEND_KEY, "Content-Type": "application/json"}
         url = f"{BACKEND_URL.rstrip('/')}{path}"
         if method == "GET":
@@ -65,12 +67,14 @@ def _call_backend(method: str, path: str, data: dict | None = None) -> dict:
         return r.json()
     else:
         # Local — import and call directly
-        try:
-            from core.vault import get_vault
-            from wallet_engine.chains import CHAINS
-            from wallet_engine.generator import get_generator as get_gen
-            from core.config import cfg
-        except ImportError:
+        import importlib.util
+
+        if not (
+            importlib.util.find_spec("core.vault")
+            and importlib.util.find_spec("wallet_engine.chains")
+            and importlib.util.find_spec("wallet_engine.generator")
+            and importlib.util.find_spec("core.config")
+        ):
             return {"error": "Cannot import wallet engine. Set WALLETPRESS_BACKEND or use WP_API_URL."}
         return _local_call(method, path, data)
 
@@ -79,16 +83,16 @@ def _local_call(method: str, path: str, data: dict | None = None) -> dict:
     """Handle a local call by routing to the appropriate module."""
     from core.vault import get_vault
     from wallet_engine.chains import CHAINS
-    from wallet_engine.generator import get_generator as get_gen
-    from core.config import cfg
 
     vault = get_vault()
-    gen = get_gen(cfg.vault_password)
 
     if path == "/health":
         return {"status": "ok", "mode": "local", "service": "walletpress-mcp"}
     if "/api/v1/chain-vault/chains" in path:
-        return {"total_chains": len(CHAINS), "chains": {k: {"name": v.name, "symbol": v.symbol} for k, v in CHAINS.items()}}
+        return {
+            "total_chains": len(CHAINS),
+            "chains": {k: {"name": v.name, "symbol": v.symbol} for k, v in CHAINS.items()},
+        }
     if "/api/v1/chain-vault/vault" in path and method == "GET":
         wallets = vault.list(limit=100)
         return {"wallets": [{"id": w.id, "chain": w.chain, "address": w.address, "label": w.label} for w in wallets]}
@@ -100,6 +104,7 @@ def _local_call(method: str, path: str, data: dict | None = None) -> dict:
 
 
 # ── MCP Tool Definitions ─────────────────────────────────────────────────────
+
 
 @mcp.tool()
 def vault_list(chain: str = "", limit: int = 50) -> list[dict]:
@@ -142,6 +147,7 @@ def balance_check(chain: str, address: str) -> dict:
 def validate_address(chain: str, address: str) -> dict:
     """Validate an address format."""
     from wallet_engine.chains import CHAINS, validate_address as va
+
     chain_info = CHAINS.get(chain.lower())
     if not chain_info:
         return {"error": f"Unsupported chain: {chain}"}
@@ -160,6 +166,7 @@ def plugins_list() -> list[dict]:
     """List all registered protocol plugins."""
     try:
         from plugins.sdk import list_plugins
+
         return list_plugins()
     except ImportError:
         return [{"note": "Plugin system not available in standalone mode"}]
@@ -171,6 +178,7 @@ def plugin_execute(plugin: str, tool: str, params: str) -> dict:
     try:
         from plugins.sdk import execute_plugin_tool
         import asyncio
+
         p = json.loads(params) if isinstance(params, str) else params
         return asyncio.run(execute_plugin_tool(plugin, tool, p))
     except ImportError:
@@ -179,9 +187,11 @@ def plugin_execute(plugin: str, tool: str, params: str) -> dict:
 
 # ── CLI Entry Point ──────────────────────────────────────────────────────────
 
+
 def main():
     """Run the MCP server as a standalone CLI."""
     import argparse
+
     parser = argparse.ArgumentParser(description="WalletPress MCP Server")
     parser.add_argument("--api-url", help="WalletPress API URL (remote mode)")
     parser.add_argument("--api-key", help="WalletPress API key")
@@ -205,6 +215,7 @@ def main():
 
     if args.transport == "sse":
         import uvicorn
+
         app = mcp.sse_app()
         uvicorn.run(app, host="0.0.0.0", port=args.port)
     else:

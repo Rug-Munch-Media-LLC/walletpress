@@ -11,9 +11,14 @@ Usage:
 No Docker required. Just pip install walletpress && walletpress serve.
 """
 
+# ruff: noqa: S603, S607  # CLI installer invokes known system binaries
+# (apt-get, openssl, systemctl, ...) via PATH with static arg lists and no
+# shell=True — not untrusted input. S607 partial-path is intended for PATH lookup.
+
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import os
@@ -25,8 +30,9 @@ logger = logging.getLogger("walletpress")
 
 def cmd_serve(args):
     """Start the WalletPress API server."""
-    from core.config import cfg
     import uvicorn
+
+    from core.config import cfg
 
     port = args.port or cfg.port
     host = args.host or cfg.host
@@ -65,6 +71,7 @@ def cmd_deploy(args):
     """
     from core.config import cfg as _cfg
     from core.license import get_license
+
     lic = get_license()
     if not lic.is_paid:
         print("  walletpress deploy requires a Pro license.")
@@ -76,7 +83,7 @@ def cmd_deploy(args):
     domain = args.domain or ""
 
     print(f"  WalletPress Pro Deploy — v{_cfg.version}")
-    print(f"  {'='*50}")
+    print(f"  {'=' * 50}")
     print(f"  License: {lic.tier.title()}")
     print(f"  Method: {method}")
     if domain:
@@ -85,7 +92,9 @@ def cmd_deploy(args):
 
     if method == "docker":
         print("  Setting up Docker Compose production stack...")
-        compose_path = os.path.join(os.path.dirname(__file__), "..", "installers", "docker-compose.prod.yml")
+        compose_path = os.path.join(
+            os.path.dirname(__file__), "..", "installers", "docker-compose.prod.yml"
+        )
         if os.path.exists(compose_path):
             print(f"  Compose file: {compose_path}")
             print(f"  Run: docker compose -f {compose_path} up -d")
@@ -102,13 +111,26 @@ def cmd_deploy(args):
 
     if system == "linux":
         print("  Installing system dependencies...")
-        try:
+        # Best-effort: non-zero exit or missing package manager should not
+        # abort the rest of the install (packages may already be present).
+        with contextlib.suppress(Exception):
             subprocess.run(["sudo", "apt-get", "update", "-qq"], check=False)
-            subprocess.run(["sudo", "apt-get", "install", "-y", "-qq",
-                           "python3", "python3-venv", "python3-pip",
-                           "openssl", "sqlite3", "curl"], check=False)
-        except Exception:
-            pass
+            subprocess.run(
+                [
+                    "sudo",
+                    "apt-get",
+                    "install",
+                    "-y",
+                    "-qq",
+                    "python3",
+                    "python3-venv",
+                    "python3-pip",
+                    "openssl",
+                    "sqlite3",
+                    "curl",
+                ],
+                check=False,
+            )
 
         print("  Setting up virtual environment...")
         venv_path = "/opt/walletpress/venv"
@@ -116,12 +138,20 @@ def cmd_deploy(args):
 
         print("  Installing Python dependencies...")
         req_path = os.path.join(os.path.dirname(__file__), "requirements.txt")
-        subprocess.run(["sudo", f"{venv_path}/bin/pip", "install", "-q", "-r", req_path], check=False)
+        subprocess.run(
+            ["sudo", f"{venv_path}/bin/pip", "install", "-q", "-r", req_path], check=False
+        )
 
         print("  Generating credentials...")
-        admin_key = subprocess.run(["openssl", "rand", "-hex", 32], capture_output=True, text=True).stdout.strip()
-        vault_pass = subprocess.run(["openssl", "rand", "-hex", 32], capture_output=True, text=True).stdout.strip()
-        subprocess.run(["openssl", "rand", "-hex", 16], capture_output=True, text=True).stdout.strip()
+        admin_key = subprocess.run(
+            ["openssl", "rand", "-hex", 32], capture_output=True, text=True
+        ).stdout.strip()
+        vault_pass = subprocess.run(
+            ["openssl", "rand", "-hex", 32], capture_output=True, text=True
+        ).stdout.strip()
+        subprocess.run(
+            ["openssl", "rand", "-hex", 16], capture_output=True, text=True
+        ).stdout.strip()
 
         print("  Creating configuration...")
         subprocess.run(["sudo", "mkdir", "-p", "/etc/walletpress"], check=False)
@@ -129,19 +159,21 @@ def cmd_deploy(args):
 
         env_content = f"""WP_ADMIN_KEY={admin_key}
 WP_VAULT_PASSWORD={vault_pass}
-WP_LICENSE_KEY={os.environ.get('WP_LICENSE_KEY', '')}
+WP_LICENSE_KEY={os.environ.get("WP_LICENSE_KEY", "")}
 WP_DOMAIN={domain}
-WP_CORS_ORIGINS={f'https://{domain}' if domain else '*'}
+WP_CORS_ORIGINS={f"https://{domain}" if domain else "*"}
 WP_SMTP_HOST=
 WP_SMTP_PORT=587
 WP_SMTP_USER=
 WP_SMTP_PASS=
-WP_FROM_EMAIL=walletpress@{domain if domain else 'localhost'}
+WP_FROM_EMAIL=walletpress@{domain if domain else "localhost"}
 WP_NOTIFY_EMAIL=
 WP_ALLOWED_IPS=
 WP_RATE_LIMIT=120
 """
-        subprocess.run(["sudo", "tee", "/etc/walletpress/env"], input=env_content, text=True, check=False)
+        subprocess.run(
+            ["sudo", "tee", "/etc/walletpress/env"], input=env_content, text=True, check=False
+        )
         subprocess.run(["sudo", "chmod", "600", "/etc/walletpress/env"], check=False)
 
         print("  Installing systemd service...")
@@ -162,15 +194,20 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 """
-        subprocess.run(["sudo", "tee", "/etc/systemd/system/walletpress.service"], input=service_content, text=True, check=False)
+        subprocess.run(
+            ["sudo", "tee", "/etc/systemd/system/walletpress.service"],
+            input=service_content,
+            text=True,
+            check=False,
+        )
         subprocess.run(["sudo", "systemctl", "daemon-reload"], check=False)
         subprocess.run(["sudo", "systemctl", "enable", "walletpress"], check=False)
         subprocess.run(["sudo", "systemctl", "start", "walletpress"], check=False)
 
         print()
-        print(f"  {'='*50}")
+        print(f"  {'=' * 50}")
         print("  WALLETPRESS PRO DEPLOYED")
-        print(f"  {'='*50}")
+        print(f"  {'=' * 50}")
         print("  URL:     http://localhost:8010")
         print("  Admin:   /api/v1/license")
         print("  Health:  /health")
@@ -199,8 +236,8 @@ WantedBy=multi-user.target
 
 def cmd_init(args):
     """Initialize the WalletPress data directory."""
-    from core.config import cfg
     from core.auth import get_key_store
+    from core.config import cfg
     from core.vault import get_vault
 
     os.makedirs(cfg.data_dir, exist_ok=True)
@@ -238,8 +275,8 @@ WP_MAX_BATCH=100
 
 def cmd_generate(args):
     """Generate a wallet from the CLI."""
-    from wallet_engine.generator import get_generator
     from wallet_engine.chains import CHAINS
+    from wallet_engine.generator import get_generator
 
     generator = get_generator()
     chain = args.chain or "eth"
@@ -251,9 +288,9 @@ def cmd_generate(args):
 
     wallet = generator.generate(chain, label=args.label or f"cli_{chain}")
     print(json.dumps(wallet.to_safe_dict(), indent=2))
-    print(f"\n{'!'*60}")
+    print(f"\n{'!' * 60}")
     print("! WARNING: Private key is shown above. Keep it SECRET.")
-    print(f"{'!'*60}")
+    print(f"{'!' * 60}")
 
 
 def cmd_validate(args):
@@ -282,21 +319,29 @@ def cmd_doctor(args):
     """Run system diagnostics and show setup status."""
     from core.config import cfg as _cfg
     from core.onboarding import onboarding_status
+
     status = onboarding_status()
     from core.license import get_license
+
     lic = get_license()
 
     print(f"\n  WalletPress Doctor — v{_cfg.version}")
-    print(f"  {'='*50}")
-    print(f"  License: {lic.tier.title()} ({'permanent key' if lic.is_paid else 'free — 3 chains only'})")
+    print(f"  {'=' * 50}")
+    print(
+        f"  License: {lic.tier.title()} ({'permanent key' if lic.is_paid else 'free — 3 chains only'})"
+    )
     print(f"  Vault encryption: {'✅ AES-256-GCM' if _cfg.vault_password else '❌ Not configured'}")
     print(f"  Admin API key: {'✅ Set' if _cfg.admin_key else '❌ Not set'}")
-    print(f"  RPC endpoints: {status['rpc_health']['rpc_configured']}/{status['rpc_health']['total_chains']} configured")
-    print(f"  SSL: {'✅ Configured' if os.path.exists('/etc/letsencrypt') or os.getenv('WP_SSL_ENABLED') else '❌ Not configured'}")
+    print(
+        f"  RPC endpoints: {status['rpc_health']['rpc_configured']}/{status['rpc_health']['total_chains']} configured"
+    )
+    print(
+        f"  SSL: {'✅ Configured' if os.path.exists('/etc/letsencrypt') or os.getenv('WP_SSL_ENABLED') else '❌ Not configured'}"
+    )
     print(f"  SMTP: {'✅ Configured' if os.getenv('WP_SMTP_HOST') else '❌ Not configured'}")
     print()
     print(f"  Issues: {status['items_missing']} of {status['items_total']} setup items incomplete")
-    missing = status['missing_items'][:5]
+    missing = status["missing_items"][:5]
     for item in missing:
         print(f"    ⚠ {item['item']}")
     print()
@@ -310,13 +355,16 @@ def cmd_doctor(args):
 def cmd_version(args):
     """Show WalletPress version."""
     from core.config import cfg
+
     print(f"WalletPress v{cfg.version}")
     print("License: MIT")
     print("Repository: https://github.com/cryptorugmuncher/walletpress")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="WalletPress — self-hosted multi-chain wallet management")
+    parser = argparse.ArgumentParser(
+        description="WalletPress — self-hosted multi-chain wallet management"
+    )
     parser.add_argument("--version", action="store_true", help="Show version")
 
     sub = parser.add_subparsers(dest="command", help="Commands")
@@ -326,9 +374,13 @@ def main():
     serve_parser.add_argument("--port", type=int, default=0, help="Bind port")
     serve_parser.add_argument("--reload", action="store_true", help="Auto-reload on code changes")
 
-    deploy_parser = sub.add_parser("deploy", help="Production one-liner setup (requires Pro license)")
+    deploy_parser = sub.add_parser(
+        "deploy", help="Production one-liner setup (requires Pro license)"
+    )
     deploy_parser.add_argument("--docker", action="store_true", help="Deploy with Docker Compose")
-    deploy_parser.add_argument("--method", default="auto", choices=["auto", "cli", "docker"], help="Deployment method")
+    deploy_parser.add_argument(
+        "--method", default="auto", choices=["auto", "cli", "docker"], help="Deployment method"
+    )
     deploy_parser.add_argument("--domain", default="", help="Domain for SSL configuration")
     deploy_parser.add_argument("--email", default="", help="Email for Let's Encrypt")
 
@@ -344,7 +396,9 @@ def main():
 
     sub.add_parser("doctor", help="Run system diagnostics")
     backup_parser = sub.add_parser("backup", help="Export vault + proofs to encrypted archive")
-    backup_parser.add_argument("--output", default="walletpress_backup.json", help="Output file path")
+    backup_parser.add_argument(
+        "--output", default="walletpress_backup.json", help="Output file path"
+    )
     restore_parser = sub.add_parser("restore", help="Restore vault from backup archive")
     restore_parser.add_argument("input", help="Backup file to restore from")
     sub.add_parser("version", help="Show version")
@@ -380,6 +434,7 @@ def main():
 def cmd_backup(args):
     """Export vault, proofs, and audit log to a portable JSON archive."""
     import json
+
     from core.vault import get_vault
 
     print(f"  Exporting WalletPress data to {args.output}...")
@@ -388,15 +443,23 @@ def cmd_backup(args):
     data = {
         "version": "1.1.0",
         "exported_at": __import__("time").time(),
-        "wallets": [{
-            "id": w.id, "chain": w.chain, "address": w.address,
-            "label": w.label, "tags": w.tags, "created_at": w.created_at,
-            "encrypted_key": w.encrypted_key,
-            "public_key": w.public_key,
-            "derivation_path": w.derivation_path,
-            "encrypted": w.encrypted,
-            "balance_usd": w.balance_usd, "notes": w.notes,
-        } for w in wallets],
+        "wallets": [
+            {
+                "id": w.id,
+                "chain": w.chain,
+                "address": w.address,
+                "label": w.label,
+                "tags": w.tags,
+                "created_at": w.created_at,
+                "encrypted_key": w.encrypted_key,
+                "public_key": w.public_key,
+                "derivation_path": w.derivation_path,
+                "encrypted": w.encrypted,
+                "balance_usd": w.balance_usd,
+                "notes": w.notes,
+            }
+            for w in wallets
+        ],
     }
     with open(args.output, "w") as f:
         json.dump(data, f, indent=2, default=str)
@@ -407,6 +470,7 @@ def cmd_backup(args):
 def cmd_restore(args):
     """Restore vault from a backup archive."""
     import json
+
     from core.vault import WalletEntry, get_vault
 
     print(f"  Restoring from {args.input}...")
@@ -416,8 +480,11 @@ def cmd_restore(args):
     count = 0
     for w_data in data.get("wallets", []):
         entry = WalletEntry(
-            id=w_data["id"], chain=w_data["chain"], address=w_data["address"],
-            label=w_data.get("label", ""), tags=w_data.get("tags", []),
+            id=w_data["id"],
+            chain=w_data["chain"],
+            address=w_data["address"],
+            label=w_data.get("label", ""),
+            tags=w_data.get("tags", []),
             created_at=w_data.get("created_at", 0),
             encrypted_key=w_data.get("encrypted_key", ""),
             public_key=w_data.get("public_key", ""),

@@ -140,9 +140,9 @@ class AgentScheduler:
         (not just intent). For EVM chains, uses wallet_sweep-like logic to broadcast.
         For non-EVM, falls back to generating a destination wallet (legacy behavior).
         """
-        from wallet_engine.generator import get_generator
-        from core.vault import get_vault, WalletEntry
         from core.config import cfg
+        from core.vault import WalletEntry, get_vault
+        from wallet_engine.generator import get_generator
         vault = get_vault()
         generator = get_generator(cfg.vault_password)
         to_addr = task.params.get("to_address", "")
@@ -203,6 +203,7 @@ class AgentScheduler:
         chain = task.chain
         if addr:
             import asyncio
+
             from agent.detector import scan_wallet
             result = asyncio.run(scan_wallet(addr, chain))
             if result.get("anomalies"):
@@ -216,9 +217,9 @@ class AgentScheduler:
                         logger.error(f"Webhook failed: {e}")
 
     def _exec_rotate(self, task: ScheduledTask):
-        from wallet_engine.generator import get_generator
-        from core.vault import get_vault, WalletEntry
         from core.config import cfg
+        from core.vault import WalletEntry, get_vault
+        from wallet_engine.generator import get_generator
         vault = get_vault()
         wallet_id = task.params.get("wallet_id", "")
         if not wallet_id:
@@ -274,6 +275,7 @@ def add_dca_task(chain: str, amount: float, frequency: str = "weekly",
 
 def add_monitor_task(wallet_id: str, webhook_url: str = "") -> dict:
     import secrets
+
     from core.vault import get_vault
     vault = get_vault()
     wallet = vault.get(wallet_id)

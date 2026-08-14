@@ -52,6 +52,7 @@ def _ensure_receipt_key():
     if _RECEIPT_KEY is not None:
         return
     from .config import cfg
+
     _RECEIPT_KEY_PATH = cfg.data_dir / ".receipt_signing_key"
     if _RECEIPT_KEY_PATH.exists():
         raw = _RECEIPT_KEY_PATH.read_bytes()
@@ -59,6 +60,7 @@ def _ensure_receipt_key():
         _RECEIPT_PUBKEY = raw[32:]
     else:
         from nacl.bindings import crypto_sign_keypair
+
         _RECEIPT_PUBKEY, _RECEIPT_KEY = crypto_sign_keypair()
         _RECEIPT_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
         _RECEIPT_KEY_PATH.write_bytes(_RECEIPT_KEY + _RECEIPT_PUBKEY)
@@ -73,15 +75,24 @@ def sign_receipt(order_id: str, chain: str, count: int, total_usd: float, timest
     """
     _ensure_receipt_key()
     from nacl.bindings import crypto_sign
+
     message = f"walletpress:receipt:{order_id}:{chain}:{count}:{total_usd}:{timestamp}".encode()
     signed = crypto_sign(message, _RECEIPT_KEY)
     return base64.b64encode(signed[:64]).decode()
 
 
-def verify_receipt(order_id: str, chain: str, count: int, total_usd: float,
-                   timestamp: float, signature: str, pubkey_hex: str) -> bool:
+def verify_receipt(
+    order_id: str,
+    chain: str,
+    count: int,
+    total_usd: float,
+    timestamp: float,
+    signature: str,
+    pubkey_hex: str,
+) -> bool:
     """Verify a signed receipt against a public key."""
     from nacl.bindings import crypto_sign_open
+
     message = f"walletpress:receipt:{order_id}:{chain}:{count}:{total_usd}:{timestamp}".encode()
     sig_bytes = base64.b64decode(signature)
     try:
@@ -109,6 +120,7 @@ def sign_key_deletion(order_id: str, chain: str, count: int, wallet_addresses: l
     """
     _ensure_receipt_key()
     from nacl.bindings import crypto_sign
+
     addr_hash = hashlib.sha256("".join(sorted(wallet_addresses)).encode()).hexdigest()[:16]
     message = f"walletpress:key-deletion:{order_id}:{chain}:{count}:{addr_hash}:{int(time.time())}".encode()
     signed = crypto_sign(message, _RECEIPT_KEY)
@@ -121,16 +133,25 @@ def get_source_tree_hash() -> str:
     Used for reproducible build verification. Customers can compare this
     hash against the running Docker image to verify the code matches.
     """
+    import shutil
     import subprocess
+
+    git_bin = shutil.which("git")
+    if not git_bin:
+        logger.debug("git executable not found — source commit unavailable")
+        return "unknown"
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=5, cwd=Path(__file__).parent.parent,
+        result = subprocess.run(  # noqa: S603 — git_bin resolved via shutil.which(), fixed trusted binary
+            [git_bin, "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=Path(__file__).parent.parent,
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to resolve git commit: %s", e)
     return "unknown"
 
 
@@ -153,16 +174,20 @@ def anchor_source_commit() -> dict:
 
     try:
         import json as j
+
         wallet = j.loads(Path(key_path).read_text())
         from ar import Arweave
+
         ar = Arweave(wallet)
-        data = j.dumps({
-            "p": "walletpress-source-anchor",
-            "v": PROOF_VERSION,
-            "commit": commit,
-            "repository": "https://github.com/cryptorugmuncher/walletpress",
-            "ts": time.time(),
-        })
+        data = j.dumps(
+            {
+                "p": "walletpress-source-anchor",
+                "v": PROOF_VERSION,
+                "commit": commit,
+                "repository": "https://github.com/cryptorugmuncher/walletpress",
+                "ts": time.time(),
+            }
+        )
         tx = ar.create_transaction(data)
         tx.sign(wallet)
         tx.send()
@@ -284,8 +309,14 @@ class ProofOfGeneration:
             conn.commit()
             logger.info(f"Proof schema migrated to v{self.SCHEMA_VERSION}")
 
-    def attest(self, wallet_id: str, chain: str, address: str,
-               public_key_hex: str, code_version: str = PROOF_VERSION) -> str:
+    def attest(
+        self,
+        wallet_id: str,
+        chain: str,
+        address: str,
+        public_key_hex: str,
+        code_version: str = PROOF_VERSION,
+    ) -> str:
         """Create a cryptographic attestation for a wallet generation event.
 
         Returns the leaf hash which serves as the wallet's proof of birth.
@@ -334,9 +365,7 @@ class ProofOfGeneration:
             (bytes.fromhex(h), {i}) for i, h in enumerate(leaf_hashes)
         ]
 
-        proof_data: dict[int, list[tuple[int, bytes, bool]]] = {
-            i: [] for i in range(count)
-        }
+        proof_data: dict[int, list[tuple[int, bytes, bool]]] = {i: [] for i in range(count)}
 
         level = 0
         while len(nodes) > 1:
@@ -406,8 +435,7 @@ class ProofOfGeneration:
                 current = hashlib.sha256(current + sibling).digest()
         return current.hex() == root_hash
 
-    def commit(self, root_hash: str, leaf_count: int,
-               commitment_chain: str = "local") -> dict:
+    def commit(self, root_hash: str, leaf_count: int, commitment_chain: str = "local") -> dict:
         """Record a Merkle root as committed.
 
         For 'local' — just stores it in SQLite.
@@ -427,8 +455,16 @@ class ProofOfGeneration:
             (root_hash, leaf_count, created_at, committed, commitment_chain,
              commitment_tx, committed_at, block_number)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (root_hash, leaf_count, time.time(), 1, commitment_chain,
-             tx_id, time.time(), block_number),
+            (
+                root_hash,
+                leaf_count,
+                time.time(),
+                1,
+                commitment_chain,
+                tx_id,
+                time.time(),
+                block_number,
+            ),
         )
         conn.execute(
             "UPDATE attestations SET committed = 1, root_hash = ? WHERE committed = 0",
@@ -449,7 +485,9 @@ class ProofOfGeneration:
                 result["verification_url"] = f"https://viewblock.io/arweave/tx/{tx_id}"
             elif commitment_chain == "ethereum":
                 result["verification_url"] = f"https://etherscan.io/tx/{tx_id}"
-        logger.info(f"Merkle root committed to {commitment_chain}: {root_hash[:16]}... ({leaf_count} attestations)")
+        logger.info(
+            f"Merkle root committed to {commitment_chain}: {root_hash[:16]}... ({leaf_count} attestations)"
+        )
         return result
 
     def _commit_to_arweave(self, root_hash: str) -> str:
@@ -466,15 +504,19 @@ class ProofOfGeneration:
 
         try:
             import json as j
+
             wallet = j.loads(Path(key_path).read_text())
             from ar import Arweave
+
             ar = Arweave(wallet)
-            data = j.dumps({
-                "p": "walletpress-pof",
-                "v": PROOF_VERSION,
-                "root": root_hash,
-                "ts": time.time(),
-            })
+            data = j.dumps(
+                {
+                    "p": "walletpress-pof",
+                    "v": PROOF_VERSION,
+                    "root": root_hash,
+                    "ts": time.time(),
+                }
+            )
             tx = ar.create_transaction(data)
             tx.sign(wallet)
             tx.send()
@@ -483,22 +525,29 @@ class ProofOfGeneration:
         except ImportError:
             # Fallback: POST to gateway (unsigned, publicly readable)
             import httpx
+
             try:
-                data = json.dumps({
-                    "p": "walletpress-pof",
-                    "v": PROOF_VERSION,
-                    "root": root_hash,
-                    "ts": time.time(),
-                })
-                resp = httpx.post("https://arweave.net/tx", json={
-                    "format": 2,
-                    "data": data.encode().hex(),
-                    "tags": [
-                        {"name": "App-Name", "value": "WalletPress-PoF"},
-                        {"name": "Content-Type", "value": "application/json"},
-                        {"name": "Root-Hash", "value": root_hash},
-                    ],
-                }, timeout=30)
+                data = json.dumps(
+                    {
+                        "p": "walletpress-pof",
+                        "v": PROOF_VERSION,
+                        "root": root_hash,
+                        "ts": time.time(),
+                    }
+                )
+                resp = httpx.post(
+                    "https://arweave.net/tx",
+                    json={
+                        "format": 2,
+                        "data": data.encode().hex(),
+                        "tags": [
+                            {"name": "App-Name", "value": "WalletPress-PoF"},
+                            {"name": "Content-Type", "value": "application/json"},
+                            {"name": "Root-Hash", "value": root_hash},
+                        ],
+                    },
+                    timeout=30,
+                )
                 if resp.status_code == 200:
                     tx_id = resp.json().get("id", "")
                     logger.info(f"Arweave commitment: {tx_id}")
@@ -516,16 +565,19 @@ class ProofOfGeneration:
 
         Requires WP_POF_ETH_RPC and WP_POF_ETH_PRIVATE_KEY env vars.
         Sends a 0-value ETH transaction with the root hash in the data field.
-        Cost: ~21,000 gas × gas price (~$5-50 at current prices).
+        Cost: ~21,000 gas x gas price (~$5-50 at current prices).
         """
         rpc_url = os.getenv("WP_POF_ETH_RPC", "")
         priv_key = os.getenv("WP_POF_ETH_PRIVATE_KEY", "")
         if not rpc_url or not priv_key:
-            logger.warning("Ethereum commitment: WP_POF_ETH_RPC or WP_POF_ETH_PRIVATE_KEY not set. Skipping.")
+            logger.warning(
+                "Ethereum commitment: WP_POF_ETH_RPC or WP_POF_ETH_PRIVATE_KEY not set. Skipping."
+            )
             return "", 0
 
         try:
             from web3 import Web3
+
             w3 = Web3(Web3.HTTPProvider(rpc_url))
             if not w3.is_connected():
                 logger.warning("Ethereum commitment: cannot connect to RPC")
@@ -552,7 +604,9 @@ class ProofOfGeneration:
             logger.info(f"Ethereum commitment: {tx_id} block={block_number}")
             return tx_id, block_number
         except ImportError:
-            logger.warning("Ethereum commitment: web3.py not installed. Install with: pip install web3")
+            logger.warning(
+                "Ethereum commitment: web3.py not installed. Install with: pip install web3"
+            )
             return "", 0
         except Exception as e:
             logger.warning(f"Ethereum commitment failed: {e}")
@@ -587,7 +641,9 @@ class ProofOfGeneration:
         leaf_hash = attest["leaf_hash"]
         root_hash = attest.get("root_hash", "")
         proof_path = self.get_proof_path(leaf_hash) if leaf_hash else []
-        verified = self.verify_merkle_proof(leaf_hash, root_hash) if root_hash and proof_path else False
+        verified = (
+            self.verify_merkle_proof(leaf_hash, root_hash) if root_hash and proof_path else False
+        )
 
         root_info = {}
         if root_hash:
@@ -617,8 +673,7 @@ class ProofOfGeneration:
             },
         }
 
-    def verify(self, wallet_id: str, address: str,
-               public_key_hex: str = "") -> dict:
+    def verify(self, wallet_id: str, address: str, public_key_hex: str = "") -> dict:
         """Verify a wallet's attestation exists and is valid.
 
         Returns the full verification result including:
@@ -638,7 +693,9 @@ class ProofOfGeneration:
         leaf_hash = attest["leaf_hash"]
         root_hash = attest.get("root_hash", "")
         proof_path = self.get_proof_path(leaf_hash) if leaf_hash else []
-        merkle_valid = self.verify_merkle_proof(leaf_hash, root_hash) if root_hash and proof_path else False
+        merkle_valid = (
+            self.verify_merkle_proof(leaf_hash, root_hash) if root_hash and proof_path else False
+        )
 
         if attest.get("committed"):
             conn = self._conn()
@@ -677,9 +734,13 @@ class ProofOfGeneration:
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
         total = conn.execute("SELECT COUNT(*) as cnt FROM attestations").fetchone()["cnt"]
-        committed = conn.execute("SELECT COUNT(*) as cnt FROM attestations WHERE committed = 1").fetchone()["cnt"]
+        committed = conn.execute(
+            "SELECT COUNT(*) as cnt FROM attestations WHERE committed = 1"
+        ).fetchone()["cnt"]
         roots = conn.execute("SELECT COUNT(*) as cnt FROM merkle_roots").fetchone()["cnt"]
-        uncommitted = conn.execute("SELECT COUNT(*) as cnt FROM attestations WHERE committed = 0").fetchone()["cnt"]
+        uncommitted = conn.execute(
+            "SELECT COUNT(*) as cnt FROM attestations WHERE committed = 0"
+        ).fetchone()["cnt"]
         conn.close()
         return {
             "total_attestations": total,
@@ -696,5 +757,6 @@ def get_proof(db_path: Path | None = None) -> ProofOfGeneration:
     global _proof
     if _proof is None:
         from .config import cfg
+
         _proof = ProofOfGeneration(db_path or cfg.data_dir / "proof.db")
     return _proof

@@ -314,10 +314,8 @@ class SmartWalletManager:
         Default implementation accepts any non-empty signature for
         flexibility during integration.
         """
-        if not signature:
-            return False
         # In production, verify signature against wallet's public key
-        return True
+        return bool(signature)
 
     def _verify_signature(self, address: str, message: str, signature: str, chain: str) -> bool:
         """Verify a signed message against an address.

@@ -13,10 +13,14 @@ from __future__ import annotations
 import math
 import time
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
+
+if TYPE_CHECKING:
+    from fastapi import Request
+    from starlette.responses import Response
 
 
 class TokenBucket:
@@ -42,7 +46,11 @@ class TokenBucket:
         else:
             allowed = False
         remaining = max(0.0, self.tokens)
-        seconds_until_full = math.ceil((self.rate - remaining) / (self.rate / max(1, self.per_seconds))) if not allowed else 0
+        seconds_until_full = (
+            math.ceil((self.rate - remaining) / (self.rate / max(1, self.per_seconds)))
+            if not allowed
+            else 0
+        )
         return allowed, remaining, seconds_until_full
 
 
@@ -64,7 +72,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _get_key(self, request: Request) -> str:
         """Get rate limiting key — API key if present, otherwise IP."""
-        api_key = request.headers.get("X-API-Key", "") or request.headers.get("Authorization", "").replace("Bearer ", "")
+        api_key = request.headers.get("X-API-Key", "") or request.headers.get(
+            "Authorization", ""
+        ).replace("Bearer ", "")
         if api_key:
             return f"key:{api_key[:16]}"
         return f"ip:{request.client.host if request.client else 'unknown'}"
@@ -118,7 +128,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Get rate limiting statistics — total buckets, active keys."""
         now = time.monotonic()
         active = 0
-        for key, bucket in self._buckets.items():
+        for _, bucket in self._buckets.items():
             if now - bucket.last_refill < 300:
                 active += 1
         return {

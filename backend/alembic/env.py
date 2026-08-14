@@ -15,11 +15,13 @@ Usage:
 """
 
 from __future__ import annotations
+
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import create_engine, pool
+
+from alembic import context
 
 config = context.config
 if config.config_file_name is not None:

@@ -25,7 +25,6 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-
 from bip_utils import Bip32Secp256k1, Bip32Slip10Ed25519, Bip39SeedGenerator
 from nacl.bindings import crypto_sign_seed_keypair
 
@@ -62,13 +61,7 @@ def _secp_pub(path: str) -> bytes:
 
 def _ed_priv(path: str) -> bytes:
     """Derive raw 32-byte ed25519 private seed (for SLIP-10 paths)."""
-    return (
-        Bip32Slip10Ed25519.FromSeed(_seed())
-        .DerivePath(path)
-        .PrivateKey()
-        .Raw()
-        .ToBytes()
-    )
+    return Bip32Slip10Ed25519.FromSeed(_seed()).DerivePath(path).PrivateKey().Raw().ToBytes()
 
 
 def _ed_pub_from_priv(priv32: bytes) -> bytes:
@@ -83,7 +76,7 @@ def _ed_pub_from_priv(priv32: bytes) -> bytes:
 
 
 @pytest.mark.parametrize(
-    "chain_key,hrp,path",
+    ("chain_key", "hrp", "path"),
     [
         ("atom", "cosmos", "m/44'/118'/0'/0/0"),
         ("osmo", "osmo", "m/44'/118'/0'/0/0"),
@@ -99,6 +92,7 @@ def test_cosmos_family(chain_key: str, hrp: str, path: str) -> None:
     addr = cosmos_address(pub, hrp)
     # Reference: bech32 library directly
     import bech32
+
     ripe = hashlib.new("ripemd160", hashlib.sha256(pub).digest()).digest()
     expected = bech32.bech32_encode(hrp, bech32.convertbits(ripe, 8, 5))
     assert addr == expected, f"{chain_key}: got {addr}, expected {expected}"
@@ -112,6 +106,7 @@ def test_cosmos_family(chain_key: str, hrp: str, path: str) -> None:
 def test_stellar_matches_stellar_sdk() -> None:
     """Our Stellar StrKey implementation matches stellar-sdk."""
     import base64 as b64
+
     priv = _ed_priv("m/44'/148'/0'/0'")
     pub = _ed_pub_from_priv(priv)
     addr = stellar_address(pub)
@@ -119,7 +114,7 @@ def test_stellar_matches_stellar_sdk() -> None:
     # Reference: build the same way stellar-sdk does internally
     version = b"\x30"
     payload = version + pub
-    chk = (0)
+    chk = 0
     for byte in payload:
         chk ^= byte << 8
         for _ in range(8):
@@ -144,8 +139,10 @@ def test_xrp_matches_xrpl_codec() -> None:
 
     # Reference: xrpl-py's addresscodec. It expects a 20-byte account ID
     # (the ripemd160 of the pubkey), not the pubkey itself.
-    from xrpl.core import addresscodec
     import hashlib
+
+    from xrpl.core import addresscodec
+
     account_id = hashlib.new("ripemd160", hashlib.sha256(pub).digest()).digest()
     expected_classic = addresscodec.encode_classic_address(account_id)
     assert addr == expected_classic, f"got {addr}, xrpl says {expected_classic}"
@@ -229,6 +226,7 @@ def test_nano_format() -> None:
 def test_algorand_matches_algosdk() -> None:
     """Our Algorand implementation matches py-algorand-sdk."""
     import base64 as b64
+
     priv = _ed_priv("m/44'/283'/0'/0'")
     pub = _ed_pub_from_priv(priv)
     _, sk = crypto_sign_seed_keypair(priv[:32])
@@ -236,6 +234,7 @@ def test_algorand_matches_algosdk() -> None:
 
     # Reference: py-algorand-sdk
     import algosdk
+
     expected = algosdk.account.address_from_private_key(b64.b64encode(sk).decode())
     assert addr == expected, f"got {addr}, algosdk says {expected}"
     # Algorand addresses are 58 chars
@@ -260,6 +259,7 @@ def test_monero_deterministic_from_seed() -> None:
 
     # Reference: monero library directly
     from monero.seed import Seed
+
     expected = str(Seed(seed32_hex).public_address())
     assert addr1 == expected, f"got {addr1}, monero lib says {expected}"
 
@@ -277,6 +277,7 @@ def test_polkadot_ss58_format() -> None:
 
     # Reference: substrate-interface
     from substrateinterface import Keypair
+
     expected = Keypair.create_from_uri(TEST_MNEMONIC, ss58_format=0).ss58_address
     assert addr == expected
 
@@ -290,6 +291,7 @@ def test_kusama_ss58_format() -> None:
 
     # Reference: substrate-interface
     from substrateinterface import Keypair
+
     expected = Keypair.create_from_uri(TEST_MNEMONIC, ss58_format=2).ss58_address
     assert addr == expected
 
@@ -309,12 +311,13 @@ def test_bch_cashaddr_format() -> None:
         .ToBytes()
     )
     addr = bitcoin_cash_cashaddr(priv)
-    assert addr.startswith("bitcoincash:q") or addr.startswith("bitcoincash:p"), (
+    assert addr.startswith(("bitcoincash:q", "bitcoincash:p")), (
         f"expected bitcoincash: prefix, got {addr[:15]}"
     )
 
     # Reference: bitcash
     from bitcash import PrivateKey
+
     expected = PrivateKey.from_bytes(priv).address
     assert addr == expected
 
@@ -343,7 +346,8 @@ def test_cardano_matches_pycardano() -> None:
     addr = cardano_address(TEST_MNEMONIC, network="mainnet")
 
     # Reference: pycardano
-    from pycardano import HDWallet, Address, Network, PaymentVerificationKey, StakeVerificationKey
+    from pycardano import Address, HDWallet, Network, PaymentVerificationKey, StakeVerificationKey
+
     wallet = HDWallet.from_mnemonic(TEST_MNEMONIC)
     acc = wallet.derive(1852, hardened=True).derive(1815, hardened=True).derive(0, hardened=True)
     pay_w = acc.derive(0).derive(0)
@@ -366,7 +370,8 @@ def test_cardano_testnet() -> None:
 def test_cardano_enterprise_matches_pycardano() -> None:
     """Enterprise address (payment only, no stake)."""
     addr = cardano_enterprise_address(TEST_MNEMONIC, network="mainnet")
-    from pycardano import HDWallet, Address, Network, PaymentVerificationKey
+    from pycardano import Address, HDWallet, Network, PaymentVerificationKey
+
     wallet = HDWallet.from_mnemonic(TEST_MNEMONIC)
     acc = wallet.derive(1852, hardened=True).derive(1815, hardened=True).derive(0, hardened=True)
     pay_w = acc.derive(0).derive(0)

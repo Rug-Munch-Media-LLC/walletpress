@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import statistics
 import time
+from contextlib import suppress
 
 logger = logging.getLogger("wp.agent.detector")
 
@@ -60,18 +61,21 @@ async def scan_wallet(address: str, chain: str = "eth") -> dict:
 
     # 3. Address format check
     from wallet_engine.chains import validate_address as va
+
     if not va(chain, address):
         warnings.append("Address format is invalid")
         risk_score += 30
 
     # 4. Check if it looks like a known scam pattern
     if _looks_like_dusting(txs):
-        anomalies.append({
-            "type": "dusting_attack",
-            "severity": "medium",
-            "description": "Wallet received multiple tiny transactions — possible dusting attack",
-            "count": sum(1 for t in txs if _is_dust(t)),
-        })
+        anomalies.append(
+            {
+                "type": "dusting_attack",
+                "severity": "medium",
+                "description": "Wallet received multiple tiny transactions — possible dusting attack",
+                "count": sum(1 for t in txs if _is_dust(t)),
+            }
+        )
         risk_score += 20
 
     risk_score = min(risk_score, 100)
@@ -106,16 +110,22 @@ async def _fetch_recent_txs(chain: str, address: str, limit: int = 50) -> list[d
 
         async with httpx.AsyncClient(timeout=10) as c:
             if chain == "eth":
-                r = await c.get(f"https://api.etherscan.io/api?module=account&action=txlist&address={address}&sort=desc&offset={limit}")
+                r = await c.get(
+                    f"https://api.etherscan.io/api?module=account&action=txlist&address={address}&sort=desc&offset={limit}"
+                )
                 data = r.json()
                 if data.get("status") == "1":
                     return data["result"]
             elif chain == "sol":
-                r = await c.post("https://api.mainnet-beta.solana.com", json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "getSignaturesForAddress",
-                    "params": [address, {"limit": min(limit, 50)}],
-                })
+                r = await c.post(
+                    "https://api.mainnet-beta.solana.com",
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "getSignaturesForAddress",
+                        "params": [address, {"limit": min(limit, 50)}],
+                    },
+                )
                 data = r.json()
                 if "result" in data:
                     return data["result"]
@@ -134,6 +144,7 @@ async def _fetch_balance(chain: str, address: str) -> float | None:
     """Fetch wallet balance. Returns float or None on failure."""
     try:
         from routers.balance_fetcher import fetch_balance
+
         result = await fetch_balance(chain, address)
         return result.get("balance_decimal", 0)
     except Exception as e:
@@ -164,10 +175,8 @@ def _analyze_transactions(txs: list[dict]) -> list[dict]:
 
         # Parse timestamp
         ts = tx.get("timeStamp", tx.get("blockTime", tx.get("time", 0)))
-        try:
+        with suppress(ValueError, TypeError):
             timestamps.append(int(ts))
-        except (ValueError, TypeError):
-            pass
 
         # Track interaction addresses
         for field in ("from", "to", "address"):
@@ -182,12 +191,14 @@ def _analyze_transactions(txs: list[dict]) -> list[dict]:
         stdev_amt = statistics.stdev(amounts) if len(amounts) > 1 else 0
         for i, amt in enumerate(amounts):
             if stdev_amt > 0 and amt > mean_amt + 3 * stdev_amt:
-                anomalies.append({
-                    "type": "large_transaction",
-                    "severity": "high",
-                    "description": f"Transaction {i} is {amt:.2f} ({amt / mean_amt:.1f}x the average of {mean_amt:.2f})",
-                    "tx": txs[i].get("hash", txs[i].get("signature", ""))[:16],
-                })
+                anomalies.append(
+                    {
+                        "type": "large_transaction",
+                        "severity": "high",
+                        "description": f"Transaction {i} is {amt:.2f} ({amt / mean_amt:.1f}x the average of {mean_amt:.2f})",
+                        "tx": txs[i].get("hash", txs[i].get("signature", ""))[:16],
+                    }
+                )
 
     # Check 2: Rapid-fire transactions (>5 in 1 minute)
     if len(timestamps) >= 5:
@@ -197,28 +208,34 @@ def _analyze_transactions(txs: list[dict]) -> list[dict]:
             if timestamps[i + 4] - timestamps[i] <= 60:
                 clusters += 1
         if clusters > 0:
-            anomalies.append({
-                "type": "rapid_transactions",
-                "severity": "medium",
-                "description": f"Found {clusters} clusters of 5+ transactions within 60 seconds",
-            })
+            anomalies.append(
+                {
+                    "type": "rapid_transactions",
+                    "severity": "medium",
+                    "description": f"Found {clusters} clusters of 5+ transactions within 60 seconds",
+                }
+            )
 
     # Check 3: Many unique first-time interactions
     if len(unique_addresses) > 20:
-        anomalies.append({
-            "type": "many_counterparties",
-            "severity": "low",
-            "description": f"Wallet interacted with {len(unique_addresses)} unique addresses",
-        })
+        anomalies.append(
+            {
+                "type": "many_counterparties",
+                "severity": "low",
+                "description": f"Wallet interacted with {len(unique_addresses)} unique addresses",
+            }
+        )
 
     # Check 4: High volume of zero-value transactions
     zero_count = sum(1 for a in amounts if a == 0)
     if len(amounts) > 0 and zero_count / len(amounts) > 0.5:
-        anomalies.append({
-            "type": "zero_value_txs",
-            "severity": "low",
-            "description": f"{zero_count}/{len(amounts)} transactions have zero value — possible spam or dusting",
-        })
+        anomalies.append(
+            {
+                "type": "zero_value_txs",
+                "severity": "low",
+                "description": f"{zero_count}/{len(amounts)} transactions have zero value — possible spam or dusting",
+            }
+        )
 
     return anomalies
 

@@ -26,7 +26,6 @@ from typing import Any
 
 from fastapi.responses import JSONResponse
 
-
 _STATUS_TITLES: dict[int, str] = {
     400: "Bad Request",
     401: "Unauthorized",

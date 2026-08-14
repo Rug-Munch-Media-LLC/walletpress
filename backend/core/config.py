@@ -11,7 +11,7 @@ class Config:
     version: str = "1.1.0"
     description: str = "Self-hosted multi-chain wallet generation & management"
 
-    host: str = os.getenv("WP_HOST", "0.0.0.0")
+    host: str = os.getenv("WP_HOST", "0.0.0.0")  # noqa: S104 — container/self-hosted default; override via WP_HOST
     port: int = int(os.getenv("WP_PORT", "8010"))
 
     data_dir: Path = Path(os.getenv("WP_DATA_DIR", "/data"))
@@ -57,6 +57,7 @@ class Config:
         # In restricted environments (e.g. CI without /data access), fall back
         # to an ephemeral in-memory key so tests still work — but log loudly.
         import secrets as _secrets
+
         new_key = _secrets.token_urlsafe(48)
         try:
             self.vault_key_path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,6 +65,7 @@ class Config:
             os.chmod(self.vault_key_path, 0o600)
             self._vault_password = new_key
             import logging
+
             logging.getLogger("wp.config").warning(
                 f"Auto-generated vault key at {self.vault_key_path} (mode 0600). "
                 f"Back this up — if lost, all vault data is unrecoverable."
@@ -71,6 +73,7 @@ class Config:
         except (PermissionError, OSError) as e:
             # Cannot write to data dir — fall back to ephemeral key.
             import logging
+
             self._vault_password = new_key
             logging.getLogger("wp.config").warning(
                 f"Cannot write vault.key to {self.vault_key_path} ({e}). "
@@ -98,6 +101,7 @@ class Config:
         wallet in the vault. See AUDIT.md P0-5 / Phase 2 follow-up.
         """
         import secrets as _secrets
+
         new_key = _secrets.token_urlsafe(48)
         self._vault_password = new_key
         self.vault_key_path.write_text(new_key)
@@ -151,14 +155,14 @@ def _check_key_file_perms(path: Path) -> bool:
     Loose perms = anyone with shell access can read the KEK and decrypt
     every wallet in the vault. Refuse to use a loosely-permed key file.
     """
-    import stat
     import logging
+    import stat
+
     mode = stat.S_IMODE(path.stat().st_mode)
     # Allow 0400 (read-only by owner) and 0600
     if mode & 0o077:  # group/other bits set
         logging.getLogger("wp.config").warning(
-            f"Vault key file {path} has permissive permissions {oct(mode)}. "
-            f"Run: chmod 600 {path}"
+            f"Vault key file {path} has permissive permissions {oct(mode)}. Run: chmod 600 {path}"
         )
         # Don't fail — just warn. Operators should fix this.
     return True

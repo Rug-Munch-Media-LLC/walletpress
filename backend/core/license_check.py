@@ -8,6 +8,7 @@ Two-layer approach:
 
 from __future__ import annotations
 
+from typing import ClassVar
 
 from fastapi import HTTPException, Request, status
 from fastapi.params import Depends
@@ -16,8 +17,8 @@ from starlette.responses import JSONResponse, Response
 
 from .license import FEATURES, get_license
 
-
 # ── Per-route dependency (preferred) ─────────────────────────────
+
 
 def require_feature(feature: str):
     """FastAPI dependency that checks a license feature.
@@ -27,7 +28,7 @@ def require_feature(feature: str):
 
     Raises 402 with upsell info if the feature is not available.
     """
-    TIER_UPSELL = {
+    tier_upsell = {
         "community": {"next": "starter", "price": 49, "url": "https://walletpress.cc/buy.html"},
         "starter": {"next": "pro", "price": 199, "url": "https://walletpress.cc/buy.html"},
         "pro": {"next": "enterprise", "price": 499, "url": "https://walletpress.cc/buy.html"},
@@ -38,19 +39,23 @@ def require_feature(feature: str):
         if lic.has_feature(feature):
             return
         tier = lic.tier
-        upsell = TIER_UPSELL.get(tier, TIER_UPSELL["community"])
-        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail={
-            "error": f"Feature '{feature}' requires {upsell['next'].title()} tier or higher",
-            "current_tier": tier,
-            "required_tier": upsell["next"],
-            "price_usd": upsell["price"],
-            "upgrade_url": upsell["url"],
-        })
+        upsell = tier_upsell.get(tier, tier_upsell["community"])
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": f"Feature '{feature}' requires {upsell['next'].title()} tier or higher",
+                "current_tier": tier,
+                "required_tier": upsell["next"],
+                "price_usd": upsell["price"],
+                "upgrade_url": upsell["url"],
+            },
+        )
 
     return Depends(dependency)
 
 
 # ── Global middleware (fallback) ─────────────────────────────────
+
 
 class LicenseMiddleware(BaseHTTPMiddleware):
     """Path-based middleware for coarse-grained license enforcement.
@@ -60,11 +65,18 @@ class LicenseMiddleware(BaseHTTPMiddleware):
     layer for any routes that forgot the dependency.
     """
 
-    EXEMPT_PREFIXES = ("/health", "/docs", "/openapi.json", "/metrics",
-                       "/api/v1/test-vectors", "/api/v1/marketplace/pricing",
-                       "/api/v1/license", "/hosting/plans")
+    EXEMPT_PREFIXES = (
+        "/health",
+        "/docs",
+        "/openapi.json",
+        "/metrics",
+        "/api/v1/test-vectors",
+        "/api/v1/marketplace/pricing",
+        "/api/v1/license",
+        "/hosting/plans",
+    )
 
-    TIER_UPSELL = {
+    TIER_UPSELL: ClassVar[dict[str, dict[str, object]]] = {
         "community": {"next": "starter", "price": 49, "url": "https://walletpress.cc/buy.html"},
         "starter": {"next": "pro", "price": 199, "url": "https://walletpress.cc/buy.html"},
         "pro": {"next": "enterprise", "price": 499, "url": "https://walletpress.cc/buy.html"},
@@ -78,14 +90,19 @@ class LicenseMiddleware(BaseHTTPMiddleware):
         lic = get_license()
         tier = lic.tier
 
-        if tier == "community" and path.startswith("/api/v1/chain-vault/generate"):
-            if request.method == "POST":
-                body = await request.json()
-                chain = body.get("chain", "")
-                allowed = lic.get_chain_list()
-                if chain and chain not in allowed:
-                    upsell = self.TIER_UPSELL["community"]
-                    return JSONResponse(status_code=402, content={
+        if (
+            tier == "community"
+            and path.startswith("/api/v1/chain-vault/generate")
+            and request.method == "POST"
+        ):
+            body = await request.json()
+            chain = body.get("chain", "")
+            allowed = lic.get_chain_list()
+            if chain and chain not in allowed:
+                upsell = self.TIER_UPSELL["community"]
+                return JSONResponse(
+                    status_code=402,
+                    content={
                         "detail": {
                             "error": f"Chain '{chain}' requires {upsell['next'].title()} tier or higher",
                             "current_tier": tier,
@@ -94,15 +111,21 @@ class LicenseMiddleware(BaseHTTPMiddleware):
                             "available_chains": allowed,
                             "upgrade_url": upsell["url"],
                         }
-                    })
+                    },
+                )
 
-        if tier == "community" and path.startswith(("/api/v1/chain-vault/generate/batch", "/api/v1/airdrop/")):
-            if request.method == "POST":
-                body = await request.json()
-                count = body.get("count", 0) or len(body.get("chains", []))
-                if count > 1 and not lic.check_batch_limit(count):
-                    upsell = self.TIER_UPSELL["community"]
-                    return JSONResponse(status_code=402, content={
+        if (
+            tier == "community"
+            and path.startswith(("/api/v1/chain-vault/generate/batch", "/api/v1/airdrop/"))
+            and request.method == "POST"
+        ):
+            body = await request.json()
+            count = body.get("count", 0) or len(body.get("chains", []))
+            if count > 1 and not lic.check_batch_limit(count):
+                upsell = self.TIER_UPSELL["community"]
+                return JSONResponse(
+                    status_code=402,
+                    content={
                         "detail": {
                             "error": f"Batch of {count} requires {upsell['next'].title()} tier or higher",
                             "current_tier": tier,
@@ -111,6 +134,7 @@ class LicenseMiddleware(BaseHTTPMiddleware):
                             "price_usd": upsell["price"],
                             "upgrade_url": upsell["url"],
                         }
-                    })
+                    },
+                )
 
         return await call_next(request)

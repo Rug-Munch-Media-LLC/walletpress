@@ -27,7 +27,6 @@ import base64
 import hashlib
 from typing import Final
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Low-level helpers
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -84,6 +83,7 @@ def cosmos_address(compressed_pubkey: bytes, hrp: str) -> str:
     and BIP-173 (bech32).
     """
     import bech32  # imported lazily so non-Cosmos chains don't need it
+
     sha = hashlib.sha256(compressed_pubkey).digest()
     ripe = hashlib.new("ripemd160", sha).digest()
     five_bit = bech32.convertbits(ripe, 8, 5)
@@ -172,7 +172,7 @@ def tezos_tz1_address(ed25519_pubkey: bytes) -> str:
     #   edpk... public key -> tz1...
     #   hash = blake2b(pubkey, 20)  -- BLAKE2b-160
     #   address = base58(prefix(3 bytes) + hash(20 bytes) + checksum(4 bytes))
-    BTC_ALPHABET = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    btc_alphabet = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
     # Compute the public key hash (BLAKE2b-160)
     pkh = hashlib.blake2b(ed25519_pubkey, digest_size=20).digest()
@@ -181,7 +181,7 @@ def tezos_tz1_address(ed25519_pubkey: bytes) -> str:
     payload = watermark + pkh
     # Checksum: double-sha256, first 4 bytes
     chk = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
-    return base58_encode_check(payload + chk, BTC_ALPHABET)
+    return base58_encode_check(payload + chk, btc_alphabet)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -234,6 +234,7 @@ def filecoin_f1_address(compressed_pubkey: bytes) -> str:
     """
     # Decompress secp256k1 (33 bytes compressed → 65 bytes uncompressed)
     from coincurve import PublicKey
+
     if len(compressed_pubkey) == 33:
         uncompressed = PublicKey(compressed_pubkey).format(compressed=False)
     else:
@@ -318,6 +319,7 @@ def monero_address(seed32_hex: str) -> str:
     if len(seed32_hex) != 64:
         raise ValueError(f"seed32_hex must be 64 hex chars (32 bytes), got {len(seed32_hex)}")
     from monero.seed import Seed
+
     s = Seed(seed32_hex)
     return str(s.public_address())
 
@@ -341,6 +343,7 @@ def substrate_ss58_address(mnemonic: str, ss58_prefix: int) -> str:
     Reference: https://docs.substrate.io/v3/advanced/ss58/
     """
     from substrateinterface import Keypair
+
     kp = Keypair.create_from_uri(mnemonic, ss58_format=ss58_prefix)
     return kp.ss58_address
 
@@ -358,6 +361,7 @@ def bitcoin_cash_cashaddr(privkey_bytes: bytes) -> str:
     cashaddr encoding: https://github.com/bitcoincashorg/bitcoincash.org/blob/master/spec/cashaddr.md
     """
     from bitcash import PrivateKey
+
     return PrivateKey.from_bytes(privkey_bytes).address
 
 
@@ -383,7 +387,9 @@ def zcash_t_address(compressed_pubkey: bytes) -> str:
     version = bytes([0x1C, 0xB8])
     payload = version + ripe
     chk = hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
-    return base58_encode_check(payload + chk, b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+    return base58_encode_check(
+        payload + chk, b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -417,7 +423,7 @@ def cardano_address(mnemonic: str, network: str = "mainnet") -> str:
 
     Reference: https://cips.cardano.org/cips/cip19/ and CIP-1852.
     """
-    from pycardano import HDWallet, Address, Network, PaymentVerificationKey, StakeVerificationKey
+    from pycardano import Address, HDWallet, Network, PaymentVerificationKey, StakeVerificationKey
 
     wallet = HDWallet.from_mnemonic(mnemonic)
     acc = wallet.derive(1852, hardened=True).derive(1815, hardened=True).derive(0, hardened=True)
@@ -434,7 +440,7 @@ def cardano_address(mnemonic: str, network: str = "mainnet") -> str:
 
 def cardano_enterprise_address(mnemonic: str, network: str = "mainnet") -> str:
     """Cardano enterprise address (payment key only, no stake delegation)."""
-    from pycardano import HDWallet, Address, Network, PaymentVerificationKey
+    from pycardano import Address, HDWallet, Network, PaymentVerificationKey
 
     wallet = HDWallet.from_mnemonic(mnemonic)
     acc = wallet.derive(1852, hardened=True).derive(1815, hardened=True).derive(0, hardened=True)
@@ -448,7 +454,7 @@ def cardano_enterprise_address(mnemonic: str, network: str = "mainnet") -> str:
 
 def cardano_reward_address(mnemonic: str, network: str = "mainnet") -> str:
     """Cardano reward/stake address (stake key only)."""
-    from pycardano import HDWallet, Address, Network, StakeVerificationKey
+    from pycardano import Address, HDWallet, Network, StakeVerificationKey
 
     wallet = HDWallet.from_mnemonic(mnemonic)
     acc = wallet.derive(1852, hardened=True).derive(1815, hardened=True).derive(0, hardened=True)
@@ -472,9 +478,9 @@ ADDRESS_ENCODERS = {
     "atom": ("bech32", "cosmos"),
     "osmo": ("bech32", "osmo"),
     "juno": ("bech32", "juno"),
-    "sei":  ("bech32", "sei"),
+    "sei": ("bech32", "sei"),
     "evmos": ("bech32", "evmos"),
-    "inj":  ("bech32", "inj"),
+    "inj": ("bech32", "inj"),
     # Stellar / XRP / Tezos / TON / Filecoin / Nano / Algorand / Monero
     "xlm": ("stellar", None),
     "xrp": ("xrp", None),
@@ -485,7 +491,7 @@ ADDRESS_ENCODERS = {
     "algo": ("algorand", None),
     # Monero + Substrate need the full key derivation context, not just pubkey
     "xmr": ("monero", None),
-    "dot": ("substrate", 0),   # ss58_prefix
+    "dot": ("substrate", 0),  # ss58_prefix
     "ksm": ("substrate", 2),
     # BCH
     "bch": ("bch", None),

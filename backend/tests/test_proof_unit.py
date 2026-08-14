@@ -12,14 +12,14 @@ from core.config import cfg
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
 from core.proof import (
-    ProofOfGeneration,
     PROOF_VERSION,
+    ProofOfGeneration,
+    anchor_source_commit,
+    get_receipt_public_key,
+    get_source_tree_hash,
+    sign_key_deletion,
     sign_receipt,
     verify_receipt,
-    get_receipt_public_key,
-    sign_key_deletion,
-    get_source_tree_hash,
-    anchor_source_commit,
 )
 
 
@@ -101,7 +101,7 @@ def test_stats():
 def test_get_proof_path():
     p = _proof()
     leaf1 = p.attest("w1", "eth", "0x1", "pk1")
-    leaf2 = p.attest("w2", "sol", "0x2", "pk2")
+    p.attest("w2", "sol", "0x2", "pk2")
     rh, _ = p.compute_merkle_root()
     p.commit(rh, 2)
     path = p.get_proof_path(leaf1)
@@ -177,7 +177,7 @@ def test_anchor_source_commit_no_arweave_key():
 def test_verify_merkle_proof_single_leaf():
     p = _proof()
     leaf = p.attest("single", "eth", "0xaddr", "pk")
-    rh, count = p.compute_merkle_root()
+    rh, _ = p.compute_merkle_root()
     # Single leaf: leaf IS the root
     assert p.verify_merkle_proof(leaf, rh) is True
 
@@ -260,7 +260,7 @@ def test_compute_merkle_root_odd_leaves():
 
 def test_commit_to_root_info():
     p = _proof()
-    leaf = p.attest("commit_info", "eth", "0xa", "pk")
+    p.attest("commit_info", "eth", "0xa", "pk")
     rh, count = p.compute_merkle_root()
     p.commit(rh, count)
     result = p.get_proof_by_wallet("commit_info")

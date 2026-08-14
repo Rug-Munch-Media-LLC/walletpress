@@ -13,6 +13,7 @@ Auth: All endpoints require API key with at least 'operator' role.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
@@ -20,12 +21,17 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from core.auth import get_key_store
 from core.audit import get_audit
+from core.auth import get_key_store
 from core.config import cfg
+
 from ._persistent_store import PersistentStore as _PersistentStore
 
 logger = logging.getLogger("wp.admin")
+
+# Fire-and-forget background tasks (e.g. webhook emissions) kept alive so the
+# event loop doesn't garbage-collect them mid-flight.
+_background_tasks: set[asyncio.Task] = set()
 
 
 class APIKeyCreateRequest(BaseModel):
@@ -195,9 +201,8 @@ async def test_webhook(webhook_id: str):
     for wh in webhooks:
         if wh.get("id") == webhook_id:
             from core.webhooks import get_webhook_deliverer
-            import asyncio
 
-            asyncio.ensure_future(
+            task = asyncio.ensure_future(
                 get_webhook_deliverer().emit(
                     "webhook.test",
                     {
@@ -207,6 +212,8 @@ async def test_webhook(webhook_id: str):
                     },
                 )
             )
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
             return {"sent": True, "note": "Test event sent. Check /webhooks/deliveries for status."}
     raise HTTPException(status_code=404, detail="Webhook not found")
 

@@ -10,11 +10,13 @@ an attacker can't use it from a different IP address.
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
 
+if TYPE_CHECKING:
+    from starlette.responses import Response
 
 ALLOWED_IPS: list[str] = []
 _raw = os.getenv("WP_ALLOWED_IPS", "")
@@ -29,10 +31,15 @@ class IPAllowlistMiddleware(BaseHTTPMiddleware):
     Health and public endpoints are exempt.
     """
 
-    SENSITIVE_PREFIXES = ("/api/v1/chain-vault/admin", "/api/v1/chain-vault/vault/",
-                          "/api/v1/chain-vault/export", "/api/v1/chain-vault/proof/commit",
-                          "/api/v1/chain-vault/proof/verify", "/api/v1/chain-vault/paper-wallet",
-                          "/api/v1/chain-vault/tx/broadcast")
+    SENSITIVE_PREFIXES = (
+        "/api/v1/chain-vault/admin",
+        "/api/v1/chain-vault/vault/",
+        "/api/v1/chain-vault/export",
+        "/api/v1/chain-vault/proof/commit",
+        "/api/v1/chain-vault/proof/verify",
+        "/api/v1/chain-vault/paper-wallet",
+        "/api/v1/chain-vault/tx/broadcast",
+    )
 
     def __init__(self, app):
         super().__init__(app)
@@ -48,7 +55,7 @@ class IPAllowlistMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else ""
-        if client_ip not in ALLOWED_IPS and "0.0.0.0" not in ALLOWED_IPS:
+        if client_ip not in ALLOWED_IPS and "0.0.0.0" not in ALLOWED_IPS:  # noqa: S104 — allowlist sentinel ("allow any IP"), not a bind address
             raise HTTPException(
                 status_code=403,
                 detail=f"Access denied from {client_ip}. Configure WP_ALLOWED_IPS to whitelist this IP.",

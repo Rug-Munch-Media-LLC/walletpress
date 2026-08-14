@@ -37,7 +37,9 @@ class AIProvider:
     def resolve(self) -> AIProvider:
         key = os.getenv(self.env_key, self.api_key) if self.env_key else self.api_key
         base = os.getenv(self.env_base_url, self.base_url) if self.env_base_url else self.base_url
-        model = os.getenv(self.env_model, self.default_model) if self.env_model else self.default_model
+        model = (
+            os.getenv(self.env_model, self.default_model) if self.env_model else self.default_model
+        )
         return AIProvider(
             name=self.name,
             base_url=base.rstrip("/"),
@@ -52,6 +54,7 @@ class AIProvider:
 def _ollama_auto_detect() -> AIProvider | None:
     """Auto-detect a running Ollama instance on localhost or common ports."""
     import socket
+
     for port in [11434, 11435]:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(0.5)
@@ -118,7 +121,6 @@ PROVIDERS: dict[str, AIProvider] = {
         key_prefix="",
         notes="European provider. Models: mistral-large-latest, mistral-small-latest, pixtral. Strong multilingual.",
     ),
-
     # ── GATEWAYS / AGGREGATORS ──────────────────────────────
     "openrouter": AIProvider(
         name="OpenRouter",
@@ -129,7 +131,6 @@ PROVIDERS: dict[str, AIProvider] = {
         key_prefix="sk-or-v1-",
         notes="300+ models from every provider. Many free models. Set model name as provider/model (e.g. openai/gpt-4o).",
     ),
-
     # ── FAST INFERENCE ──────────────────────────────────────
     "groq": AIProvider(
         name="Groq",
@@ -149,7 +150,6 @@ PROVIDERS: dict[str, AIProvider] = {
         key_prefix="",
         notes="Fastest inference (~1800 tok/s). Limited free tier. Models: llama-3.3-70b, llama-4-scout.",
     ),
-
     # ── OPEN-SOURCE FOCUSED ─────────────────────────────────
     "deepseek": AIProvider(
         name="DeepSeek",
@@ -187,7 +187,6 @@ PROVIDERS: dict[str, AIProvider] = {
         key_prefix="",
         notes="Very broad model selection. Llama, Qwen, DeepSeek, Mixtral, Phi. Serverless pricing.",
     ),
-
     # ── SEARCH-AUGMENTED ────────────────────────────────────
     "perplexity": AIProvider(
         name="Perplexity",
@@ -198,7 +197,6 @@ PROVIDERS: dict[str, AIProvider] = {
         key_prefix="pplx-",
         notes="Web-search augmented models. NO /v1 in base_url. Models: sonar-pro, sonar-deep-research. Paid API.",
     ),
-
     # ── ADDITIONAL PROVIDERS ─────────────────────────────────
     "cohere": AIProvider(
         name="Cohere",
@@ -227,7 +225,6 @@ PROVIDERS: dict[str, AIProvider] = {
         key_prefix="",
         notes="GPU cloud + inference. OpenAI compatible. Models: Llama, Qwen, DeepSeek. Free trial credits.",
     ),
-
     # ── CLOUD PROVIDERS ──────────────────────────────────────
     "github": AIProvider(
         name="GitHub Models",
@@ -248,7 +245,6 @@ PROVIDERS: dict[str, AIProvider] = {
         key_prefix="",
         notes="Runs on Cloudflare's edge network. Set WP_AI_CLOUDFLARE_URL with your account_id baked in. Models: @cf/meta/llama-*.",
     ),
-
     # ── LOCAL ────────────────────────────────────────────────
     "ollama": AIProvider(
         name="Ollama (Local)",
@@ -346,7 +342,7 @@ def get_provider(name: str | None = None) -> AIProvider:
     except ValueError:
         raise
     except Exception as e:
-        raise ValueError(f"Failed to configure AI provider: {e}")
+        raise ValueError(f"Failed to configure AI provider: {e}") from e
 
 
 def test_connection(provider: AIProvider) -> dict:
@@ -356,7 +352,8 @@ def test_connection(provider: AIProvider) -> dict:
     This is called when the user first configures a provider to validate
     that the endpoint, key, and model are all correct.
     """
-    from openai import OpenAI, APIError, AuthenticationError, NotFoundError, RateLimitError
+    from openai import APIError, AuthenticationError, NotFoundError, OpenAI, RateLimitError
+
     try:
         client = OpenAI(api_key=provider.api_key, base_url=provider.base_url)
         models = client.models.list()
@@ -421,10 +418,12 @@ def list_providers() -> str:
 def get_llm_client(provider: AIProvider):
     """Create an OpenAI-compatible client for the given provider."""
     from openai import OpenAI
+
     return OpenAI(api_key=provider.api_key, base_url=provider.base_url)
 
 
 def get_embedding_client(provider: AIProvider):
     """Create an OpenAI-compatible client for embeddings."""
     from openai import OpenAI
+
     return OpenAI(api_key=provider.api_key, base_url=provider.base_url)

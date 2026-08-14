@@ -11,19 +11,20 @@ from core.config import cfg
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
 import hashlib
+
 import pytest
+
 from wallet_engine.chain_addresses import (
-    ripemd160_of_sha256,
-    crc16_xmodem,
+    XRP_ALPHABET,
+    algorand_address,
     base58_encode_check,
     cosmos_address,
-    xrp_address,
-    nano_address,
-    algorand_address,
+    crc16_xmodem,
     encode_address,
-    XRP_ALPHABET,
+    nano_address,
+    ripemd160_of_sha256,
+    xrp_address,
 )
-
 
 # ── Low-level helper tests ───────────────────────────────────────
 

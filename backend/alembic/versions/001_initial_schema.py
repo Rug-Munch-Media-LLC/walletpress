@@ -3,10 +3,15 @@
 Revises: None (first migration)
 Create Date: 2026-06-30
 """
+
 from __future__ import annotations
-from collections.abc import Sequence
+
+from typing import TYPE_CHECKING
 
 from alembic import op
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 revision: str = "001_initial_schema"
 down_revision: str | None = None

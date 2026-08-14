@@ -1,7 +1,6 @@
 """Unit tests: KeyStore and API key authentication (no HTTP)."""
 
 import os
-import json
 import tempfile
 from pathlib import Path
 
@@ -12,7 +11,7 @@ from core.config import cfg
 
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
-from core.auth import KeyStore, role_has_at_least, ROLE_HIERARCHY
+from core.auth import ROLE_HIERARCHY, KeyStore, role_has_at_least
 
 
 def test_create_key():
@@ -116,14 +115,14 @@ def test_create_invalid_role():
     ks = KeyStore(Path(tempfile.mkstemp(suffix=".json")[1]))
     import pytest
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid role"):
         ks.create(label="bad-role", scopes=["wallet.read"], role="superadmin")
 
 
 def test_persistence():
     path = Path(tempfile.mkstemp(suffix=".json")[1])
     ks1 = KeyStore(path)
-    key_id, raw_key = ks1.create(label="persist-test", scopes=["wallet.read"])
+    _, raw_key = ks1.create(label="persist-test", scopes=["wallet.read"])
     # Create new instance with same path — should load keys
     ks2 = KeyStore(path)
     assert ks2.verify(raw_key) is not None
@@ -151,7 +150,7 @@ def test_get_role():
 
 def test_create_with_owner():
     ks = KeyStore(Path(tempfile.mkstemp(suffix=".json")[1]))
-    key_id, raw_key = ks.create(
+    _, raw_key = ks.create(
         label="owned", scopes=["wallet.read"], role="viewer", owner="user@example.com"
     )
     key = ks.verify(raw_key)

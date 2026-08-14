@@ -19,9 +19,12 @@ import sqlite3
 import struct
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .config import cfg
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger("wp.totp")
 
@@ -78,11 +81,15 @@ class TOTPManager:
         conn = self._conn()
         exists = conn.execute("SELECT id FROM totp WHERE id = 1").fetchone()
         if exists:
-            conn.execute("UPDATE totp SET secret = ?, enabled = 0, created_at = ? WHERE id = 1",
-                         (secret_b32, time.time()))
+            conn.execute(
+                "UPDATE totp SET secret = ?, enabled = 0, created_at = ? WHERE id = 1",
+                (secret_b32, time.time()),
+            )
         else:
-            conn.execute("INSERT INTO totp (id, enabled, secret, created_at) VALUES (1, 0, ?, ?)",
-                         (secret_b32, time.time()))
+            conn.execute(
+                "INSERT INTO totp (id, enabled, secret, created_at) VALUES (1, 0, ?, ?)",
+                (secret_b32, time.time()),
+            )
         conn.commit()
         conn.close()
 
@@ -124,7 +131,7 @@ class TOTPManager:
         msg = struct.pack(">Q", counter)
         h = hmac.new(secret_bytes, msg, hashlib.sha1).digest()
         offset = h[-1] & 0xF
-        code = (struct.unpack(">I", h[offset:offset + 4])[0] & 0x7FFFFFFF) % (10 ** TOTP_DIGITS)
+        code = (struct.unpack(">I", h[offset : offset + 4])[0] & 0x7FFFFFFF) % (10**TOTP_DIGITS)
         return str(code).zfill(TOTP_DIGITS)
 
     def _totp_at_time(self, secret_bytes: bytes, timestamp: float) -> str:

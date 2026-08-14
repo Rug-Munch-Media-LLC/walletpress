@@ -6,7 +6,6 @@ import io
 import logging
 import time
 
-
 from core.config import cfg
 
 logger = logging.getLogger("wp.pdf")
@@ -14,13 +13,16 @@ logger = logging.getLogger("wp.pdf")
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
-    from reportlab.pdfgen import canvas
     from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
     HAS_REPORTLAB = True
 except ImportError:
     HAS_REPORTLAB = False
 
 try:
+    import qrcode
+
     HAS_QR = True
 except ImportError:
     HAS_QR = False
@@ -30,6 +32,7 @@ def _qr_image(data: str, size: int = 200) -> ImageReader | None:
     if not HAS_QR:
         return None
     import io
+
     qr = qrcode.QRCode(box_size=4, border=2)
     qr.add_data(data)
     qr.make(fit=True)
@@ -40,10 +43,16 @@ def _qr_image(data: str, size: int = 200) -> ImageReader | None:
     return ImageReader(buf)
 
 
-def generate_paper_wallet(address: str, chain: str, private_key: str = "",
-                          public_key: str = "", derivation_path: str = "",
-                          created_at: float = 0.0, proof_leaf: str = "",
-                          label: str = "") -> bytes | None:
+def generate_paper_wallet(
+    address: str,
+    chain: str,
+    private_key: str = "",
+    public_key: str = "",
+    derivation_path: str = "",
+    created_at: float = 0.0,
+    proof_leaf: str = "",
+    label: str = "",
+) -> bytes | None:
     """Generate a printable paper wallet PDF.
 
     Returns PDF bytes or None if reportlab is not installed.
@@ -63,7 +72,11 @@ def generate_paper_wallet(address: str, chain: str, private_key: str = "",
     c.drawString(margin, y, "WALLETPRESS PAPER WALLET")
     y -= 30
     c.setFont("Helvetica", 10)
-    c.drawString(margin, y, f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(created_at or time.time()))}")
+    c.drawString(
+        margin,
+        y,
+        f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(created_at or time.time()))}",
+    )
     y -= 14
     c.drawString(margin, y, f"Software: WalletPress Pro v{cfg.version}")
     y -= 14
@@ -82,7 +95,11 @@ def generate_paper_wallet(address: str, chain: str, private_key: str = "",
     c.drawString(margin + 8, y - 16, "⚠ KEEP THIS DOCUMENT SECURE")
     c.setFont("Helvetica", 9)
     c.setFillColorRGB(0.5, 0, 0)
-    c.drawString(margin + 8, y - 32, "Anyone with this paper can control the crypto assets. Store in a safe, waterproof location.")
+    c.drawString(
+        margin + 8,
+        y - 32,
+        "Anyone with this paper can control the crypto assets. Store in a safe, waterproof location.",
+    )
     c.setFillColorRGB(0, 0, 0)
     y -= 70
 
@@ -109,7 +126,7 @@ def generate_paper_wallet(address: str, chain: str, private_key: str = "",
         c.setFont("Courier", 8)
         c.setFillColorRGB(0, 0, 0)
         # Split long key into lines
-        key_lines = [private_key[i:i+48] for i in range(0, len(private_key), 48)]
+        key_lines = [private_key[i : i + 48] for i in range(0, len(private_key), 48)]
         for line in key_lines:
             c.drawString(margin, y, line)
             y -= 12
@@ -121,7 +138,7 @@ def generate_paper_wallet(address: str, chain: str, private_key: str = "",
         c.drawString(margin, y, "Public Key")
         y -= 14
         c.setFont("Courier", 7)
-        pk_lines = [public_key[i:i+64] for i in range(0, len(public_key), 64)]
+        pk_lines = [public_key[i : i + 64] for i in range(0, len(public_key), 64)]
         for line in pk_lines[:4]:
             c.drawString(margin, y, line)
             y -= 10
@@ -142,16 +159,24 @@ def generate_paper_wallet(address: str, chain: str, private_key: str = "",
     # Footer
     c.setFont("Helvetica", 7)
     c.setFillColorRGB(0.5, 0.5, 0.5)
-    c.drawString(margin, margin * 0.5, f"WalletPress Pro — walletpress.cc — {cfg.version} — MIT Open Source")
+    c.drawString(
+        margin, margin * 0.5, f"WalletPress Pro — walletpress.cc — {cfg.version} — MIT Open Source"
+    )
 
     c.save()
     return buf.getvalue()
 
 
-def generate_birth_certificate(wallet_id: str, address: str, chain: str,
-                               public_key: str = "", created_at: float = 0.0,
-                               proof_leaf: str = "", root_hash: str = "",
-                               committed: bool = False) -> bytes | None:
+def generate_birth_certificate(
+    wallet_id: str,
+    address: str,
+    chain: str,
+    public_key: str = "",
+    created_at: float = 0.0,
+    proof_leaf: str = "",
+    root_hash: str = "",
+    committed: bool = False,
+) -> bytes | None:
     """Generate a Wallet Birth Certificate — printable provenance document.
 
     This is a unique feature. It cryptographically proves when and how
@@ -181,7 +206,9 @@ def generate_birth_certificate(wallet_id: str, address: str, chain: str,
     c.setFillColorRGB(0.4, 0.4, 0.4)
     c.drawString(margin, y, "This certifies that the following wallet was generated by WalletPress")
     y -= 14
-    c.drawString(margin, y, "with cryptographic proof of its creation time, code version, and integrity.")
+    c.drawString(
+        margin, y, "with cryptographic proof of its creation time, code version, and integrity."
+    )
     y -= 30
 
     # Details
@@ -191,7 +218,7 @@ def generate_birth_certificate(wallet_id: str, address: str, chain: str,
         ("Wallet ID", wallet_id),
         ("Address", address),
         ("Chain", chain.upper()),
-        ("Created", time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(created_at))),
+        ("Created", time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(created_at))),
         ("Public Key", public_key[:48] + "..." if len(public_key) > 48 else public_key),
     ]
     for label, value in details:
@@ -227,7 +254,9 @@ def generate_birth_certificate(wallet_id: str, address: str, chain: str,
     c.setFillColorRGB(0.5, 0.5, 0.5)
     c.drawString(margin, y, "Verify: walletpress.cc/api/v1/proof/verify/{wallet_id}")
     y -= 10
-    c.drawString(margin, y, f"Software: WalletPress Pro v{cfg.version} — MIT Open Source — walletpress.cc")
+    c.drawString(
+        margin, y, f"Software: WalletPress Pro v{cfg.version} — MIT Open Source — walletpress.cc"
+    )
 
     c.save()
     return buf.getvalue()

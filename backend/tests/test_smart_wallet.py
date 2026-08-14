@@ -7,8 +7,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Import keccak early so it can be patched
-from Crypto.Hash import keccak as _keccak_import  # noqa: F401
-from Crypto.Hash import keccak  # noqa: F401  # ensure keccak is loadable for patch
+from Crypto.Hash import (
+    keccak,  # noqa: F401  # ensure keccak is loadable for patch
+    keccak as _keccak_import,  # noqa: F401
+)
 
 os.environ["WP_VAULT_PASSWORD"] = "test-vault-password"
 os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_sw_")
@@ -74,19 +76,19 @@ def test_request_recovery_with_sufficient_guardians():
     with (
         patch.object(sw, "_verify_signature", return_value=True),
         patch.object(sw, "_verify_claimant_signature", return_value=True),
-    ):
-        with patch.object(
+        patch.object(
             sw,
             "_execute_recovery",
             return_value={"success": True, "new_address": "0xNEW"},
-        ):
-            result = sw.request_recovery(
-                "wallet_r3",
-                "0xNEW",
-                "eth",
-                sigs,
-                claimant_signature="0xVALID",
-            )
+        ),
+    ):
+        result = sw.request_recovery(
+            "wallet_r3",
+            "0xNEW",
+            "eth",
+            sigs,
+            claimant_signature="0xVALID",
+        )
 
     assert result.get("recovered") is True
     assert result.get("success") or result.get("new_address")
@@ -177,13 +179,15 @@ def test_trigger_deadman_after_timer():
         sw.setup_deadman("wallet_d5", "0xHEIR", heir_chain="eth", timeout_days=30)
 
     later = now + 35 * 86400
-    with patch("core.smart_wallet.time.time", return_value=later):
-        with patch.object(
+    with (
+        patch("core.smart_wallet.time.time", return_value=later),
+        patch.object(
             sw,
             "_execute_recovery",
             return_value={"success": True, "new_address": "0xNEW"},
-        ):
-            result = sw.trigger_deadman("wallet_d5", "0xHEIR", "0xSIG")
+        ),
+    ):
+        result = sw.trigger_deadman("wallet_d5", "0xHEIR", "0xSIG")
 
     assert result.get("triggered") is True
     assert result["heir_address"] == "0xHEIR"
@@ -224,16 +228,16 @@ def test_verify_signature_valid():
     sig = "0x" + "ff" * 64 + "1b"
 
     with (
-        patch("coincurve.PublicKey") as MockPK,
-        patch("Crypto.Hash.keccak") as MockKeccak,
+        patch("coincurve.PublicKey") as mock_pk,
+        patch("Crypto.Hash.keccak") as mock_keccak,
     ):
         mock_pub = MagicMock()
         mock_pub.format.return_value = bytes.fromhex("04" + "00" * 32 + "ab" * 20)
-        MockPK.from_signature_and_message.return_value = mock_pub
+        mock_pk.from_signature_and_message.return_value = mock_pub
 
         mock_hash = MagicMock()
         mock_hash.digest.return_value = bytes.fromhex("00" * 12 + "ab" * 20)
-        MockKeccak.new.return_value = mock_hash
+        mock_keccak.new.return_value = mock_hash
 
         assert sw._verify_signature(address, "msg", sig, "eth") is True
 
@@ -244,16 +248,16 @@ def test_verify_signature_invalid():
     sig = "0x" + "ff" * 64 + "1c"
 
     with (
-        patch("coincurve.PublicKey") as MockPK,
-        patch("Crypto.Hash.keccak") as MockKeccak,
+        patch("coincurve.PublicKey") as mock_pk,
+        patch("Crypto.Hash.keccak") as mock_keccak,
     ):
         mock_pub = MagicMock()
         mock_pub.format.return_value = bytes.fromhex("04" + "00" * 32 + "cd" * 20)
-        MockPK.from_signature_and_message.return_value = mock_pub
+        mock_pk.from_signature_and_message.return_value = mock_pub
 
         mock_hash = MagicMock()
         mock_hash.digest.return_value = bytes.fromhex("00" * 12 + "cd" * 20)
-        MockKeccak.new.return_value = mock_hash
+        mock_keccak.new.return_value = mock_hash
 
         assert sw._verify_signature(address, "msg", sig, "eth") is False
 
@@ -363,11 +367,13 @@ def test_trigger_deadman_already_triggered():
     with patch("core.smart_wallet.time.time", return_value=now):
         sw.setup_deadman("already_done", "0xHEIR", heir_chain="eth", timeout_days=30)
     later = now + 35 * 86400
-    with patch("core.smart_wallet.time.time", return_value=later):
-        with patch.object(
+    with (
+        patch("core.smart_wallet.time.time", return_value=later),
+        patch.object(
             sw, "_execute_recovery", return_value={"success": True, "new_address": "0xNEW"}
-        ):
-            result = sw.trigger_deadman("already_done", "0xHEIR")
+        ),
+    ):
+        result = sw.trigger_deadman("already_done", "0xHEIR")
     assert result.get("triggered") is True
     # Try again — should fail
     with patch("core.smart_wallet.time.time", return_value=later):

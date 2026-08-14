@@ -16,13 +16,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import secrets
 import time
 from dataclasses import dataclass
-
-import ipaddress
 from urllib.parse import urlparse
 
 import httpx
@@ -51,9 +50,9 @@ def validate_webhook_url(url: str) -> None:
     if parsed.scheme not in ("https",):
         raise ValueError(f"Webhook URL must use HTTPS, got '{parsed.scheme}'")
     host = parsed.hostname or ""
-    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):  # noqa: S104 — SSRF guard literal, not a bind address
         raise ValueError("Webhook URL must not point to localhost")
-    if host.endswith(".local") or host.endswith(".internal"):
+    if host.endswith((".local", ".internal")):
         raise ValueError("Webhook URL must not point to an internal hostname")
     try:
         addr = ipaddress.ip_address(host)
@@ -64,14 +63,21 @@ def validate_webhook_url(url: str) -> None:
         if isinstance(host, str) and host:
             pass  # hostname — can't validate without DNS resolution at registration time
 
+
 # Delivery log — append-only, in-memory, capped at MAX entries
 delivery_log: list[dict] = []
 DELIVERY_LOG_MAX = 1000
 
 
-def _log_delivery(event_id: str, event_type: str, target_url: str,
-                  status: str, status_code: int = 0, attempt: int = 0,
-                  error: str = ""):
+def _log_delivery(
+    event_id: str,
+    event_type: str,
+    target_url: str,
+    status: str,
+    status_code: int = 0,
+    attempt: int = 0,
+    error: str = "",
+):
     entry = {
         "event_id": event_id,
         "event_type": event_type,
@@ -115,11 +121,12 @@ class WebhookDeliverer:
         self._client: httpx.AsyncClient | None = None
         self._running = False
         self._queue: asyncio.Queue = asyncio.Queue()
+        self._worker_task: asyncio.Task | None = None
 
     async def start(self):
         self._client = httpx.AsyncClient(timeout=15)
         self._running = True
-        asyncio.create_task(self._worker_loop())
+        self._worker_task = asyncio.create_task(self._worker_loop())
         logger.info("Webhook deliverer started")
 
     async def stop(self):
@@ -157,12 +164,14 @@ class WebhookDeliverer:
         return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
 
     async def _deliver(self, target: WebhookTarget, event: WebhookEvent) -> bool:
-        body = json.dumps({
-            "event_id": event.event_id,
-            "event_type": event.event_type,
-            "created_at": event.created_at,
-            "payload": event.payload,
-        }).encode()
+        body = json.dumps(
+            {
+                "event_id": event.event_id,
+                "event_type": event.event_type,
+                "created_at": event.created_at,
+                "payload": event.payload,
+            }
+        ).encode()
 
         signature = self._sign_payload(body, target.secret)
 
@@ -180,24 +189,45 @@ class WebhookDeliverer:
                     },
                 )
                 if resp.is_success:
-                    logger.info(f"Webhook delivered: {event.event_type} -> {target.url} (attempt {attempt + 1})")
-                    _log_delivery(event.event_id, event.event_type, target.url,
-                                  "delivered", resp.status_code, attempt + 1)
+                    logger.info(
+                        f"Webhook delivered: {event.event_type} -> {target.url} (attempt {attempt + 1})"
+                    )
+                    _log_delivery(
+                        event.event_id,
+                        event.event_type,
+                        target.url,
+                        "delivered",
+                        resp.status_code,
+                        attempt + 1,
+                    )
                     return True
 
-                logger.warning(f"Webhook {target.url} returned {resp.status_code} (attempt {attempt + 1})")
-                _log_delivery(event.event_id, event.event_type, target.url,
-                              "failed", resp.status_code, attempt + 1)
+                logger.warning(
+                    f"Webhook {target.url} returned {resp.status_code} (attempt {attempt + 1})"
+                )
+                _log_delivery(
+                    event.event_id,
+                    event.event_type,
+                    target.url,
+                    "failed",
+                    resp.status_code,
+                    attempt + 1,
+                )
             except Exception as e:
-                logger.warning(f"Webhook delivery failed: {target.url} ({e}) (attempt {attempt + 1})")
-                _log_delivery(event.event_id, event.event_type, target.url,
-                              "error", 0, attempt + 1, str(e))
+                logger.warning(
+                    f"Webhook delivery failed: {target.url} ({e}) (attempt {attempt + 1})"
+                )
+                _log_delivery(
+                    event.event_id, event.event_type, target.url, "error", 0, attempt + 1, str(e)
+                )
 
             if attempt < MAX_RETRIES - 1:
-                delay = BASE_DELAY * (4 ** attempt)
+                delay = BASE_DELAY * (4**attempt)
                 await asyncio.sleep(delay)
 
-        logger.error(f"Webhook delivery FAILED after {MAX_RETRIES} attempts: {event.event_type} -> {target.url}")
+        logger.error(
+            f"Webhook delivery FAILED after {MAX_RETRIES} attempts: {event.event_type} -> {target.url}"
+        )
         return False
 
     async def _worker_loop(self):
@@ -205,7 +235,7 @@ class WebhookDeliverer:
             try:
                 event = await self._queue.get()
                 tasks = []
-                for target_id, target in self._targets.items():
+                for _, target in self._targets.items():
                     if self._should_deliver(target, event.event_type):
                         tasks.append(self._deliver(target, event))
                 if tasks:

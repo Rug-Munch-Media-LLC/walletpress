@@ -2,25 +2,22 @@
 
 import os
 import tempfile
-import time
 from pathlib import Path
 
 os.environ["WP_VAULT_PASSWORD"] = "test-pw-hosting"
 os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_hosting_")
 
 import hashlib
-import pytest
 
 from core.hosting import (
-    HostingDB,
     PLANS,
-    _hash_password,
-    _verify_password,
-    _needs_rehash,
+    HostingDB,
     _check_legacy_hashes,
+    _hash_password,
+    _needs_rehash,
+    _verify_password,
     get_hosting,
 )
-from core.config import cfg
 
 
 def _hosting() -> HostingDB:
@@ -135,13 +132,13 @@ class TestHostingDB:
     def test_check_limit_unlimited(self):
         h = _hosting()
         reg = h.register("unlimited@example.com", "pw")
-        ok, msg = h.check_limit(reg["user_id"])
+        ok, _ = h.check_limit(reg["user_id"])
         # Free plan has daily_wallet_limit=10 — should be OK with 0 usage
         assert ok is True
 
     def test_check_limit_user_not_found(self):
         h = _hosting()
-        ok, msg = h.check_limit("nonexistent_user")
+        ok, _ = h.check_limit("nonexistent_user")
         assert ok is False
 
     def test_get_user(self):

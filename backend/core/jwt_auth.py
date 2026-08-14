@@ -19,21 +19,21 @@ import logging
 import os
 import time
 import urllib.request
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+
+if TYPE_CHECKING:
+    from fastapi import Request, Response
 
 logger = logging.getLogger("wp.jwt_auth")
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 _JWT_ALGORITHM: str = os.getenv("WP_JWT_ALGORITHM", "RS256")
 _JWT_PUBLIC_KEY: str = os.getenv("WP_JWT_PUBLIC_KEY", "")
-_JWKS_URL: str = os.getenv(
-    "WP_JWKS_URL", "https://rugmunch.io/.well-known/jwks.json"
-)
+_JWKS_URL: str = os.getenv("WP_JWKS_URL", "https://rugmunch.io/.well-known/jwks.json")
 _JWKS_CACHE_TTL: int = int(os.getenv("WP_JWKS_CACHE_TTL", "3600"))  # 1 hour
 
 # Cache for fetched JWKS key
@@ -58,9 +58,17 @@ def _fetch_jwks() -> str | None:
         return key
 
     # Fetch from JWKS endpoint
+    # Guard against non-http(s) schemes before opening (SSRF prevention for env-configurable URL).
+    from urllib.parse import urlparse
+
+    parsed = urlparse(_JWKS_URL)
+    if parsed.scheme not in ("http", "https"):
+        logger.warning("Refusing JWKS fetch from non-http(s) URL: %s", _JWKS_URL)
+        return None
+
     try:
-        req = urllib.request.Request(_JWKS_URL, method="GET")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        req = urllib.request.Request(_JWKS_URL, method="GET")  # noqa: S310 — scheme validated to http(s) above
+        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310 — scheme validated to http(s) above
             data = json.loads(resp.read().decode())
 
         # Try JWKS format first
@@ -142,9 +150,7 @@ class JWTValidationMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._public_key: str | None = _fetch_jwks()
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
 
         # Skip auth for public paths
@@ -180,6 +186,7 @@ class JWTValidationMiddleware(BaseHTTPMiddleware):
         # but return 401 for malformed JWTs
         if auth.startswith("Bearer ") and not auth[7:].startswith("wp_"):
             from datetime import UTC, datetime
+
             return JSONResponse(
                 status_code=401,
                 content={

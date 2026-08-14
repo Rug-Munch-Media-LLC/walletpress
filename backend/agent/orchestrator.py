@@ -16,7 +16,7 @@ import json
 import logging
 from typing import Any
 
-from agent.providers import get_provider, get_llm_client
+from agent.providers import get_llm_client, get_provider
 
 logger = logging.getLogger("wp.agent.orchestrator")
 
@@ -83,13 +83,17 @@ def _call_llm(system: str, user: str) -> str:
         return resp.choices[0].message.content or ""
     except Exception as e:
         logger.error(f"LLM call failed: {e}")
-        return json.dumps({
-            "intent": "failed to plan",
-            "steps": [],
-            "warnings": [f"AI provider error: {e}. Check your WP_AI_PROVIDER and WP_AI_API_KEY configuration."],
-            "needs_confirmation": False,
-            "error": str(e),
-        })
+        return json.dumps(
+            {
+                "intent": "failed to plan",
+                "steps": [],
+                "warnings": [
+                    f"AI provider error: {e}. Check your WP_AI_PROVIDER and WP_AI_API_KEY configuration."
+                ],
+                "needs_confirmation": False,
+                "error": str(e),
+            }
+        )
 
 
 def plan_operation(prompt: str, context: str = "") -> dict:
@@ -134,11 +138,12 @@ def execute_plan(plan: list[dict] | str, confirm: bool = False) -> dict:
         try:
             plan_data = json.loads(plan)
         except (json.JSONDecodeError, TypeError):
-            plan_data = ast.literal_eval(plan) if isinstance(plan, str) and plan.strip().startswith("[") else {"steps": []}
-        if isinstance(plan_data, dict):
-            plan = plan_data.get("steps", [])
-        else:
-            plan = plan_data
+            plan_data = (
+                ast.literal_eval(plan)
+                if isinstance(plan, str) and plan.strip().startswith("[")
+                else {"steps": []}
+            )
+        plan = plan_data.get("steps", []) if isinstance(plan_data, dict) else plan_data
 
     if not plan:
         return {"error": "No steps in plan", "results": []}
@@ -162,7 +167,13 @@ def execute_plan(plan: list[dict] | str, confirm: bool = False) -> dict:
         except Exception as e:
             logger.error(f"Step {i + 1} failed: {e}")
             results.append({"step": i, "tool": tool_name, "error": str(e), "success": False})
-            return {"status": "failed", "completed": i, "total": len(plan), "results": results, "error": f"Step '{description}' failed: {e}"}
+            return {
+                "status": "failed",
+                "completed": i,
+                "total": len(plan),
+                "results": results,
+                "error": f"Step '{description}' failed: {e}",
+            }
 
     return {"status": "completed", "total": len(plan), "results": results}
 

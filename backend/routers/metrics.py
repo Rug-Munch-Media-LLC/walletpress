@@ -15,14 +15,15 @@ Metrics:
 from __future__ import annotations
 
 import time
+from contextlib import suppress
 
 from fastapi import APIRouter, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from core.config import cfg
 from core.vault import get_vault
-from wallet_engine.generator import get_generator
 from wallet_engine.chains import CHAINS
+from wallet_engine.generator import get_generator
 
 router = APIRouter(tags=["Metrics"])
 
@@ -89,6 +90,7 @@ async def usage_dashboard():
     vault_stats = vault.stats()
     from core.rate_limit import RateLimitMiddleware
     from main import app
+
     rate_limiter = None
     for m in app.user_middleware:
         if m.cls == RateLimitMiddleware:
@@ -96,10 +98,8 @@ async def usage_dashboard():
             break
     rate_stats = {}
     if rate_limiter:
-        try:
-            rate_stats = rate_limiter.stats() if hasattr(rate_limiter, 'stats') else {}
-        except Exception:
-            pass
+        with suppress(Exception):
+            rate_stats = rate_limiter.stats() if hasattr(rate_limiter, "stats") else {}
     return {
         "service": "WalletPress Usage Dashboard",
         "uptime_seconds": int(time.time() - _metrics_data["start_time"]),

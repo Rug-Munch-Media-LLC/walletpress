@@ -237,7 +237,7 @@ async def import_wallet(req: ImportRequest, request: Request):
         label=wallet.label,
         tags=wallet.tags,
         created_at=wallet.created_at,
-        encrypted_key=wallet.private_key_hex,
+        encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
         encrypted=wallet.encrypted,
     )
     vault.put(entry)

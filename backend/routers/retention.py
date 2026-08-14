@@ -107,7 +107,7 @@ async def batch_import(request: Request, file: UploadFile):
                 tags=wallet.tags,
                 group=group,
                 created_at=wallet.created_at,
-                encrypted_key=wallet.private_key_hex,
+                encrypted_key=wallet.private_key_hex if wallet.encrypted else "",
                 encrypted=wallet.encrypted,
                 notes=notes,
             )

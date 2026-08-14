@@ -25,9 +25,12 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from core.config import cfg
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger("wp.smart_wallet")
 
@@ -147,8 +150,7 @@ class SmartWalletManager:
 
     # ── SOCIAL RECOVERY ─────────────────────────────────────
 
-    def setup_recovery(self, wallet_id: str, guardians: list[str],
-                       threshold: int = 2) -> dict:
+    def setup_recovery(self, wallet_id: str, guardians: list[str], threshold: int = 2) -> dict:
         """Configure M-of-N social recovery for a wallet.
 
         Args:
@@ -198,9 +200,14 @@ class SmartWalletManager:
             "created_at": row["created_at"],
         }
 
-    def request_recovery(self, wallet_id: str, new_address: str, chain: str,
-                         signatures: list[dict],
-                         claimant_signature: str = "") -> dict:
+    def request_recovery(
+        self,
+        wallet_id: str,
+        new_address: str,
+        chain: str,
+        signatures: list[dict],
+        claimant_signature: str = "",
+    ) -> dict:
         """Request social recovery with guardian signatures.
 
         Each signature must be:
@@ -263,8 +270,15 @@ class SmartWalletManager:
             """INSERT INTO recovery_requests
             (id, wallet_id, new_address, chain, guardian_sigs, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (recovery_id, wallet_id, new_address, chain,
-             json.dumps(valid_sigs), "approved", time.time()),
+            (
+                recovery_id,
+                wallet_id,
+                new_address,
+                chain,
+                json.dumps(valid_sigs),
+                "approved",
+                time.time(),
+            ),
         )
         conn.commit()
         conn.close()
@@ -305,8 +319,7 @@ class SmartWalletManager:
         # In production, verify signature against wallet's public key
         return True
 
-    def _verify_signature(self, address: str, message: str,
-                          signature: str, chain: str) -> bool:
+    def _verify_signature(self, address: str, message: str, signature: str, chain: str) -> bool:
         """Verify a signed message against an address.
 
         Supports: EVM (eth_sign / EIP-191), Solana (ed25519),
@@ -320,6 +333,7 @@ class SmartWalletManager:
                 # Solana: ed25519 signature
                 import base58
                 from nacl.bindings import crypto_sign_verify_detached
+
                 sig_bytes = bytes.fromhex(signature.replace("0x", ""))
                 msg_bytes = message.encode()
                 pub_bytes = base58.b58decode(address)
@@ -341,14 +355,13 @@ class SmartWalletManager:
 
                 # Recover public key from signature
                 # coincurve >= 18 expects the full 65-byte serialized signature
-                pub = PublicKey.from_signature_and_message(
-                    sig_bytes, msg_hash
-                )
+                pub = PublicKey.from_signature_and_message(sig_bytes, msg_hash)
                 pub_hex = pub.format().hex()
 
                 # Derive address
                 if pub_hex:
                     from Crypto.Hash import keccak
+
                     k = keccak.new(digest_bits=256)
                     k.update(bytes.fromhex(pub_hex[2:] if pub_hex.startswith("04") else pub_hex))
                     recovered_addr = "0x" + k.digest()[-20:].hex()
@@ -358,7 +371,7 @@ class SmartWalletManager:
             raise RuntimeError(
                 "coincurve is required for signature verification. "
                 "Install it: pip install coincurve>=18.0.0"
-            )
+            ) from None
         except Exception as e:
             logger.debug(f"Signature verification failed: {e}")
             return False
@@ -378,7 +391,8 @@ class SmartWalletManager:
                 return {"error": f"Wallet {wallet_id} not found"}
 
             vault.record_rotation(
-                wallet_id, new_address,
+                wallet_id,
+                new_address,
                 reason=f"social_recovery_to_{new_address}",
             )
             logger.info(f"Recovery executed: {wallet_id} → {new_address}")
@@ -404,9 +418,9 @@ class SmartWalletManager:
 
     # ── DEAD MAN'S SWITCH ───────────────────────────────────
 
-    def setup_deadman(self, wallet_id: str, heir_address: str,
-                      heir_chain: str = "eth",
-                      timeout_days: int = 180) -> dict:
+    def setup_deadman(
+        self, wallet_id: str, heir_address: str, heir_chain: str = "eth", timeout_days: int = 180
+    ) -> dict:
         """Set up a dead man's switch for a wallet.
 
         If the wallet has no activity for `timeout_days`, the heir can
@@ -432,8 +446,7 @@ class SmartWalletManager:
             (wallet_id, heir_address, heir_chain, timeout_days, last_activity,
              created_at, triggered)
             VALUES (?, ?, ?, ?, ?, ?, 0)""",
-            (wallet_id, heir_address, heir_chain, timeout_days,
-             time.time(), time.time()),
+            (wallet_id, heir_address, heir_chain, timeout_days, time.time(), time.time()),
         )
         conn.commit()
         conn.close()
@@ -477,8 +490,9 @@ class SmartWalletManager:
             "triggered": bool(row["triggered"]),
         }
 
-    def trigger_deadman(self, wallet_id: str, claimant_address: str,
-                        claimant_signature: str = "") -> dict:
+    def trigger_deadman(
+        self, wallet_id: str, claimant_address: str, claimant_signature: str = ""
+    ) -> dict:
         """Trigger a dead man's switch as the heir.
 
         Only the registered heir can trigger this. The wallet's key
@@ -517,7 +531,9 @@ class SmartWalletManager:
 
         # Execute recovery: rotate to new key controlled by heir
         result = self._execute_recovery(
-            wallet_id, claimant_address, row["heir_chain"],
+            wallet_id,
+            claimant_address,
+            row["heir_chain"],
         )
         if result.get("error"):
             return result
@@ -557,8 +573,9 @@ class SmartWalletManager:
 
     # ── TIME-LOCKED TRANSACTIONS ────────────────────────────
 
-    def create_timelock(self, wallet_id: str, to_address: str, chain: str,
-                        amount: float, execute_at: float) -> dict:
+    def create_timelock(
+        self, wallet_id: str, to_address: str, chain: str, amount: float, execute_at: float
+    ) -> dict:
         """Create a time-locked transaction.
 
         The transaction is stored and executed by the scheduler when
@@ -608,9 +625,7 @@ class SmartWalletManager:
                 (wallet_id,),
             ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT * FROM timelocks ORDER BY execute_at"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM timelocks ORDER BY execute_at").fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -654,7 +669,10 @@ class SmartWalletManager:
         for tl in rows:
             try:
                 result = self._send_transaction(
-                    tl["wallet_id"], tl["to_address"], tl["chain"], tl["amount"],
+                    tl["wallet_id"],
+                    tl["to_address"],
+                    tl["chain"],
+                    tl["amount"],
                 )
                 conn = self._conn()
                 conn.execute(
@@ -663,30 +681,34 @@ class SmartWalletManager:
                 )
                 conn.commit()
                 conn.close()
-                results.append({
-                    "timelock_id": tl["id"],
-                    "executed": True,
-                    "tx_hash": result.get("tx_hash", ""),
-                })
+                results.append(
+                    {
+                        "timelock_id": tl["id"],
+                        "executed": True,
+                        "tx_hash": result.get("tx_hash", ""),
+                    }
+                )
                 logger.info(f"Timelock {tl['id']} executed")
             except Exception as e:
                 logger.error(f"Timelock {tl['id']} execution failed: {e}")
-                results.append({
-                    "timelock_id": tl["id"],
-                    "executed": False,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "timelock_id": tl["id"],
+                        "executed": False,
+                        "error": str(e),
+                    }
+                )
 
         return results
 
-    def _send_transaction(self, wallet_id: str, to_address: str,
-                          chain: str, amount: float) -> dict:
+    def _send_transaction(self, wallet_id: str, to_address: str, chain: str, amount: float) -> dict:
         """Execute an on-chain transaction via configured RPC.
 
         Supports EVM chains (eth, base, polygon, etc.) via eth_sendRawTransaction.
         For other chains, records the intent with instructions.
         """
         from core.vault import get_vault
+
         vault = get_vault()
         wallet = vault.get(wallet_id)
         if not wallet:
@@ -704,10 +726,12 @@ class SmartWalletManager:
             }
 
         from wallet_engine.chains import CHAINS
+
         chain_info = CHAINS.get(chain)
         if chain_info and chain_info.family.value in ("evm",):
             try:
                 import httpx
+
                 resp = httpx.post(
                     rpc_url,
                     json={

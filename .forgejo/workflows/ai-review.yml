@@ -1,0 +1,130 @@
+# AI PR Review — DeepSeek V4 Flash (self-hosted pattern, no vendor SaaS)
+# Advisory layer of the Frontend Golden Pipeline (Gate 8).
+# Requires repo secrets: DEEPSEEK_API_KEY (+ optional GITEA_TOKEN for PR comments).
+# Without secrets the job degrades to a no-op — never blocks merges.
+name: AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ai-review:
+    runs-on: docker-x64
+    container:
+      image: node:22-bookworm-slim
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Write reviewer script
+        run: |
+          cat > /tmp/ai-review.mjs <<'SCRIPT'
+          import fs from "node:fs";
+
+          const diff = fs.readFileSync("/tmp/pr.diff", "utf8").slice(0, 60000);
+          const key = process.env.DEEPSEEK_API_KEY;
+          if (!key) {
+            console.log("DEEPSEEK_API_KEY not set — skipping AI review (advisory layer)");
+            process.exit(0);
+          }
+          const payload = {
+            model: "deepseek-v4-flash",
+            temperature: 0.1,
+            max_tokens: 2000,
+            messages: [
+              {
+                role: "system",
+                content: [
+                  "You are a strict senior frontend code reviewer for an AI-assisted team.",
+                  "Agents write most diffs, so verify aggressively. Review the diff for:",
+                  "1. Hallucinated imports, fake APIs, calls to functions that don't exist",
+                  "2. Type safety violations (any in public APIs, unsafe casts)",
+                  "3. React/Vue/Astro rule violations (hooks order, list keys, hydration mismatches)",
+                  "4. Accessibility regressions (missing alt/aria-labels, contrast, keyboard traps)",
+                  "5. Security (hardcoded secrets, dangerouslySetInnerHTML on untrusted input, XSS)",
+                  "6. Performance (unbunded assets, N+1 fetches, missing memoization on hot paths)",
+                  "7. AI slop (console.log left in, placeholder code, tautological tests, dead code)",
+                  "For each issue report exactly: [SEVERITY] file:line — Description",
+                  "Severity: BLOCKER (must fix) | WARNING (should fix) | INFO (consider)",
+                  "End with VERDICT: PASS or NEEDS_FIXES or REJECT. Be concise; skip praise.",
+                ].join("\n"),
+              },
+              { role: "user", content: "Review this PR diff:\n\n" + diff },
+            ],
+          };
+          let res;
+          try {
+            res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${key}`,
+              },
+              body: JSON.stringify(payload),
+            });
+          } catch (e) {
+            console.log(`::warning::DeepSeek unreachable: ${e.message}`);
+            process.exit(0);
+          }
+          if (!res.ok) {
+            console.log(`::warning::DeepSeek API returned ${res.status} — AI review skipped`);
+            process.exit(0);
+          }
+          const data = await res.json();
+          const review = data.choices?.[0]?.message?.content ?? "";
+          if (!review) {
+            console.log("::warning::Empty AI review response");
+            process.exit(0);
+          }
+          fs.writeFileSync("/tmp/review.md", review);
+          console.log(review);
+          SCRIPT
+
+      - name: Get PR diff
+        run: |
+          git fetch origin "${{ github.base_ref }}" || true
+          git diff "origin/${{ github.base_ref }}...HEAD" > /tmp/pr.diff || git diff HEAD~1 > /tmp/pr.diff
+
+      - name: Run AI Review
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          node /tmp/ai-review.mjs || echo "::warning::AI review failed — non-blocking"
+          if [ -s /tmp/review.md ]; then
+            {
+              echo "## 🤖 AI Review (DeepSeek)"
+              echo ""
+              cat /tmp/review.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Post review to PR
+        if: env.DEEPSEEK_API_KEY != ''
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          [ -s /tmp/review.md ] || { echo "No review to post"; exit 0; }
+          TOKEN="${GITEA_TOKEN:-$FORGEJO_TOKEN}"
+          if [ -z "$TOKEN" ]; then
+            echo "No Forgejo token — review available in job summary only"
+            exit 0
+          fi
+          node -e '
+            const fs = require("fs");
+            const body = fs.readFileSync("/tmp/review.md", "utf8");
+            fs.writeFileSync("/tmp/comment.json",
+              JSON.stringify({ body: "## 🤖 AI Review (DeepSeek)\n\n" + body }));
+          '
+          curl -s -X POST \
+            "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -H "Authorization: token $TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/comment.json > /dev/null && echo "✅ Review posted to PR"

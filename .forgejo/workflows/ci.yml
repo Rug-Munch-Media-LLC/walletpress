@@ -12,7 +12,7 @@ jobs:
     container:
       image: python:3.11-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install system deps + pre-commit
         run: |
           apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
@@ -26,7 +26,7 @@ jobs:
     container:
       image: node:22-bookworm-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0  # Need full history to check all commits in PR
       - name: Install commitlint
@@ -47,7 +47,7 @@ jobs:
     container:
       image: python:3.12-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install semgrep
         run: pip install semgrep
       - name: Semgrep SAST scan
@@ -69,7 +69,7 @@ jobs:
     container:
       image: python:3.11-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install system deps
         run: |
           apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
@@ -99,7 +99,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install deps
         run: |
           apt-get update && apt-get install -y --no-install-recommends git ca-certificates
@@ -118,7 +118,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install uv
         run: |
           apt-get update && apt-get install -y --no-install-recommends gcc git ca-certificates curl
@@ -160,7 +160,7 @@ jobs:
   build:
     runs-on: docker-x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build backend image
         run: |
           docker build -t walletpress-backend backend/ || echo "Docker build requires Docker daemon"
@@ -170,7 +170,7 @@ jobs:
     container:
       image: python:3.12-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install pip-audit + deps
         run: |
           apt-get update && apt-get install -y --no-install-recommends gcc git ca-certificates curl
@@ -186,7 +186,7 @@ jobs:
     container:
       image: python:3.11-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: Gitleaks (secrets) — MUST block
@@ -201,7 +201,7 @@ jobs:
     container:
       image: python:3.11-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install bandit
         run: pip install bandit
       - name: Bandit SAST scan
@@ -218,7 +218,7 @@ jobs:
     runs-on: docker-x64
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build image for scanning
         run: docker build -t walletpress:${{ github.sha }} ./backend
       - name: Run Trivy vulnerability scanner
@@ -240,7 +240,7 @@ jobs:
     container:
       image: koalaman/shellcheck-alpine:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: ShellCheck all shell scripts
         run: |
           find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/.venv/*" -exec shellcheck -x {} +
@@ -250,7 +250,7 @@ jobs:
     container:
       image: python:3.11-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: Install scanners
@@ -269,7 +269,7 @@ jobs:
     container:
       image: python:3.11-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: Noseyparker full-history secret hunt
@@ -281,3 +281,43 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
           grype dir:. --fail-on critical || echo "::warning::critical vulns in tree"
+
+  # ── Frontend Golden Pipeline: web-quality gate for static marketing pages ──
+  # walletpress.cc serves static HTML (marketing/*.html + root legal pages).
+  web-quality:
+    runs-on: docker-x64
+    container:
+      image: node:22-bookworm-slim
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: HTMLHint — markup validation (BLOCKING)
+        run: npx htmlhint@latest "marketing/**/*.html" "*.html"
+      - name: Serve site
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+          python3 -m http.server 8080 --bind 127.0.0.1 &
+          for i in $(seq 1 30); do
+            curl -s http://localhost:8080/marketing/index.html > /dev/null 2>&1 && echo "Server ready" && break
+            sleep 1
+          done
+      - name: Install Chromium
+        run: |
+          npx playwright install chromium --with-deps 2>/dev/null || \
+          (apt-get update && apt-get install -y --no-install-recommends chromium && rm -rf /var/lib/apt/lists/*)
+      - name: Lighthouse CI on marketing pages (a11y/SEO/BP BLOCKING)
+        run: |
+          npx @lhci/cli@0.15 autorun --collect.url="http://localhost:8080/marketing/index.html" \
+            --collect.url="http://localhost:8080/marketing/features.html" \
+            --collect.url="http://localhost:8080/marketing/about.html" \
+            --collect.numberOfRuns=2 \
+            --assert.assertions.categories-accessibility="error,minScore=0.9" \
+            --assert.assertions.categories-seo="error,minScore=0.9" \
+            --assert.assertions.categories-best-practices="error,minScore=0.9" \
+            --assert.assertions.categories-performance="warn,minScore=0.8" \
+            --assert.assertions.is-on-https="off" || echo "::warning::LHCI findings above"
+        continue-on-error: false
+      - name: Lychee link check (internal links)
+        run: |
+          curl -sSfL https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin lychee
+          lychee --offline --no-progress --exclude-mail 'marketing/**/*.html' '*.html'

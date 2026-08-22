@@ -10,7 +10,7 @@ jobs:
   pre-commit-mirror:
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install system deps + pre-commit
@@ -45,7 +45,7 @@ jobs:
   semgrep:
     runs-on: docker-x64
     container:
-      image: python:3.12-slim
+      image: nikolaik/python-nodejs:python3.12-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install semgrep
@@ -67,7 +67,7 @@ jobs:
   lint:
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install system deps
@@ -94,7 +94,7 @@ jobs:
   typecheck:
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     defaults:
       run:
         working-directory: backend
@@ -113,7 +113,7 @@ jobs:
   test:
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     defaults:
       run:
         working-directory: backend
@@ -168,7 +168,7 @@ jobs:
   pip-audit:
     runs-on: docker-x64
     container:
-      image: python:3.12-slim
+      image: nikolaik/python-nodejs:python3.12-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install pip-audit + deps
@@ -184,7 +184,7 @@ jobs:
   security:
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -199,7 +199,7 @@ jobs:
   bandit:
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install bandit
@@ -238,7 +238,7 @@ jobs:
   shellcheck:
     runs-on: docker-x64
     container:
-      image: koalaman/shellcheck-alpine:latest
+      image: localhost/ci-alpine-node:3.19
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: ShellCheck all shell scripts
@@ -248,7 +248,7 @@ jobs:
   supply-chain:
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -267,7 +267,7 @@ jobs:
     if: ${{ github.event_name == 'schedule' }}
     runs-on: docker-x64
     container:
-      image: python:3.11-slim
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

@@ -98,6 +98,8 @@ paths = [
   '''\.next/''',
   '''\.nuxt/''',
   '''\.pytest_cache/''',
+  # Lighthouse CI local report artifacts (screenshots/base64 trip generic detectors)
+  '''\.lighthouseci/''',
   '''\.ruff_cache/''',
   '''\.mypy_cache/''',
   '''vendor/''',

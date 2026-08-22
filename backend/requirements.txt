@@ -4,6 +4,9 @@ pydantic>=2.5.0
 pydantic-settings>=2.1.0
 coincurve>=18.0.0
 ecdsa>=0.19.0
+# Floor pins overriding vulnerable transitives (osv 2026-08-22):
+orjson>=3.11.5
+pycryptodomex>=3.19.1
 base58>=2.1.1
 pynacl>=1.5.0
 cryptography>=42.0.0
@@ -28,7 +31,7 @@ substrate-interface>=1.8.0
 coincurve>=18.0.0
 pycardano>=0.19.0   # Cardano Kholaw (BIP32-Ed25519 IOHK) — 1.1 MB disk
 
-python-multipart>=0.0.9
+python-multipart>=0.0.31
 mcp>=1.25.0
 python-jose[cryptography]>=3.3.0
 

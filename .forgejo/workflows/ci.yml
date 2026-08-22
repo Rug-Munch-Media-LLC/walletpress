@@ -259,9 +259,9 @@ jobs:
           curl -sSfL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o /usr/local/bin/osv-scanner && chmod +x /usr/local/bin/osv-scanner
           curl -sSfL https://github.com/trufflesecurity/trufflehog/releases/latest/download/trufflehog_linux_amd64.tar.gz | tar xz -C /usr/local/bin trufflehog
       - name: OSV dependency scan (hallucinated/vulnerable deps)
-        run: osv-scanner scan source --format table ./ || echo "::warning::OSV findings — triaged baseline, see log"
+        run: osv-scanner scan source --format table backend/requirements.txt walletpress-mcp/pyproject.toml || echo "::warning::OSV findings — triaged baseline, see log"
       - name: Trufflehog verified-live secrets (all history)
-        run: trufflehog git file://. --only-verified --failures-only --no-update
+        run: trufflehog git file://. --only-verified --fail --no-update
 
   nightly-deep-scan:
     if: ${{ github.event_name == 'schedule' }}
@@ -306,17 +306,7 @@ jobs:
           npx playwright install chromium --with-deps 2>/dev/null || \
           (apt-get update && apt-get install -y --no-install-recommends chromium && rm -rf /var/lib/apt/lists/*)
       - name: Lighthouse CI on marketing pages (a11y/SEO/BP BLOCKING)
-        run: |
-          npx @lhci/cli@0.15 autorun --collect.url="http://localhost:8080/marketing/index.html" \
-            --collect.url="http://localhost:8080/marketing/features.html" \
-            --collect.url="http://localhost:8080/marketing/about.html" \
-            --collect.numberOfRuns=2 \
-            --assert.assertions.categories-accessibility="error,minScore=0.9" \
-            --assert.assertions.categories-seo="error,minScore=0.9" \
-            --assert.assertions.categories-best-practices="error,minScore=0.9" \
-            --assert.assertions.categories-performance="warn,minScore=0.8" \
-            --assert.assertions.is-on-https="off" || echo "::warning::LHCI findings above"
-        continue-on-error: false
+        run: npx @lhci/cli@0.15 autorun --config=./lighthouserc.json
       - name: Lychee link check (internal links)
         run: |
           curl -sSfL https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin lychee

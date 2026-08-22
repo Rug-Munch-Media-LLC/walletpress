@@ -82,6 +82,11 @@ tags = ["rmi", "critical"]
 
 [allowlist]
 description = "Build artifacts + specific known false positives (no blanket directory excludes)"
+# Historical test fixtures: 10.0.0.1 example IP in unit tests (commit 79e0b0a),
+# replaced with TEST-NET-1 192.0.2.1 in working tree; history retained.
+commits = [
+  "79e0b0afb46318f6564b703a3ba2e6bfcac351af",
+]
 paths = [
   # Pre-commit methodology check: detection patterns (scanner, not leak)
   '''scripts/pre-commit-methodology-check\.sh''',

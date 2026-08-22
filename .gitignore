@@ -87,3 +87,6 @@ RADICLE.md
 .nuxt/
 coverage/
 
+
+# Lighthouse CI local artifacts
+.lighthouseci/

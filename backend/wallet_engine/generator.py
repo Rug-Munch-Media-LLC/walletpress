@@ -912,11 +912,55 @@ class WalletGenerator:
             )
 
         try:
+            # SECURITY (TOP-100 #13, 2026-08-23): derive the REAL on-chain
+            # address from the imported key where the curve allows it.
+            # Previously this stored "imported:{chain}:{key[-8:]}" — a fake
+            # address that broke address-keyed lookups AND leaked the last
+            # 8 hex chars of the private key into the address column.
+            derived_address: str | None = None
+            if chain.curve == "secp256k1" and len(key_bytes) == 32:
+                try:
+                    pk = CoinCurveKey.from_hex(private_key_hex.removeprefix("0x"))
+                    pub = pk.public_key.format(compressed=False)[1:]
+                    derived_address = _to_eip55_checksum("0x" + _keccak256(pub).hex()[-40:])
+                except Exception:
+                    _crypto_log_error(
+                        logger, "import_from_private_key(secp256k1)", {"chain": chain_key}
+                    )
+            elif chain.curve == "ed25519" and len(key_bytes) in (32, 64):
+                try:
+                    from nacl.bindings import crypto_sign_seed_keypair
+
+                    seed32 = key_bytes[:32]
+                    _sk, pub_bytes = crypto_sign_seed_keypair(seed32)
+                    if chain_key.lower() == "sol":
+                        import base58 as _b58
+
+                        derived_address = _b58.b58encode(pub_bytes).decode()
+                    else:
+                        # Other ed25519 chains have chain-specific encodings;
+                        # full coverage tracked in TOP-100 #80 (golden vectors).
+                        derived_address = None
+                except Exception:
+                    _crypto_log_error(
+                        logger, "import_from_private_key(ed25519)", {"chain": chain_key}
+                    )
+
+            if derived_address is None:
+                # Non-leaky placeholder: NO key material, clearly marked so
+                # address-keyed lookups fail loudly instead of silently.
+                derived_address = f"imported:{chain_key}"
+                logger.warning(
+                    "imported key for %s stored without derived address "
+                    "(curve/encoding not supported for raw-key derivation)",
+                    chain_key,
+                )
+
             wallet = GeneratedWallet(
                 chain=chain_key,
                 chain_name=chain.name,
                 symbol=chain.symbol,
-                address=f"imported:{chain_key}:{private_key_hex[-8:]}",
+                address=derived_address,
                 private_key_hex=private_key_hex,
                 label=label or f"imported_{chain_key}_{int(time.time())}",
                 tags=tags or ["imported"],

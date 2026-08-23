@@ -102,7 +102,10 @@ async def batch_import(request: Request, file: UploadFile):
             entry = WalletEntry(
                 id=f"imp_{secrets.token_hex(6)}",
                 chain=wallet.chain,
-                address=wallet.address or f"imported:{chain}:{priv_key[-8:]}",
+                # SECURITY (TOP-100 #13): never embed key material in the
+                # address field; generator now derives real addresses where
+                # supported and returns a non-leaky placeholder otherwise.
+                address=wallet.address or f"imported:{chain}",
                 label=wallet.label,
                 tags=wallet.tags,
                 group=group,

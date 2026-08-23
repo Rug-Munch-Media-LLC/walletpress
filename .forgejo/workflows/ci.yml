@@ -306,7 +306,9 @@ jobs:
           npx playwright install chromium --with-deps 2>/dev/null || \
           (apt-get update && apt-get install -y --no-install-recommends chromium && rm -rf /var/lib/apt/lists/*)
       - name: Lighthouse CI on marketing pages (a11y/SEO/BP BLOCKING)
-        run: npx @lhci/cli@0.15 autorun --config=./lighthouserc.json
+        run: |
+          export CHROME_PATH=$(find /root/.cache/ms-playwright -name chrome -type f -path "*chrome-linux*" | head -1)
+          npx @lhci/cli@0.15 autorun --config=./lighthouserc.json
       - name: Lychee link check (internal links)
         run: |
           curl -sSfL https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin lychee

@@ -45,3 +45,7 @@ This repo follows Rug Munch Media LLC fleet standards:
 ## Repository
 - Source of truth: `https://github.com/RugMunchMedia/walletpress`
 - Mirrors: Codeberg, GitLab, HuggingFace
+
+## FAQ
+
+See [docs/FAQ.md](docs/FAQ.md) for frequently asked questions.

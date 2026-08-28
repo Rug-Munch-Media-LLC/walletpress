@@ -170,6 +170,15 @@ def test_vault_get_full(client, admin_headers):
     data = resp.json()
     assert data["id"] == wallet_id
     assert "private_key_hex" in data
+    # Full export must return the DECRYPTED private key (64-char hex),
+    # not the stored ciphertext.
+    from core.vault import get_vault
+
+    encrypted_key = get_vault().get(wallet_id).encrypted_key
+    assert encrypted_key, "wallet should store an encrypted key blob"
+    assert len(data["private_key_hex"]) == 64
+    assert all(c in "0123456789abcdefABCDEF" for c in data["private_key_hex"])
+    assert data["private_key_hex"] != encrypted_key
 
 
 def test_validate_address(client, admin_headers):

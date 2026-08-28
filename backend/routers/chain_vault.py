@@ -387,6 +387,12 @@ async def get_wallet_full(wallet_id: str, request: Request):
         resource=wallet_id,
     )
 
+    # Decrypt the stored ciphertext — never leak the raw encrypted blob as a key.
+    try:
+        private_key_hex = vault.decrypt_key(wallet.encrypted_key) if wallet.encrypted_key else ""
+    except CryptoError as e:
+        raise HTTPException(status_code=500, detail=f"Key decryption failed: {e}") from e
+
     return {
         "id": wallet.id,
         "chain": wallet.chain,
@@ -398,7 +404,7 @@ async def get_wallet_full(wallet_id: str, request: Request):
         "derivation_path": wallet.derivation_path,
         "hd_path": wallet.hd_path,
         "encrypted": wallet.encrypted,
-        "private_key_hex": wallet.encrypted_key if wallet.encrypted_key else "",
+        "private_key_hex": private_key_hex,
         "mnemonic_encrypted": wallet.mnemonic_encrypted if wallet.mnemonic_encrypted else "",
         "balance_usd": wallet.balance_usd,
         "notes": wallet.notes,

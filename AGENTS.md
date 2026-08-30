@@ -49,6 +49,20 @@ make commit        # conventional commit
 make clean         # remove build artifacts
 ```
 
+## Domain Boundaries (one domain -> one repo -> one owner)
+Canonical contract: [standards/ARCHITECTURE.md](../standards/ARCHITECTURE.md) +
+`standards/repo-domains.json`. Enforced by `.importlinter` (pre-push) and
+`scripts/repo-boundary-check.sh` (pre-commit).
+
+- **OWNS:** wallet generation & management — wallet engine, x402 service, chain
+  vault, CLI, wp-plugin. This is the wallet product domain.
+- **DOES NOT own:** scanner engine / detectors (rugmunch-scanner), RAG / embedding
+  / retrieval (rugbrain), the crypto-intelligence API + DataBus (rmi-backend), the
+  Telegram client (rugmunchbot), the web-scraping framework (pryscraper), and the
+  codebase-reference corpus (contextcrypto).
+- **Leaf boundary:** walletpress never imports `app`, `rugbrain`,
+  `rugmunch_scanner`, `rugmunchbot`, or `pry` internals.
+
 ## Architecture
 See [ARCHITECTURE.md](ARCHITECTURE.md). Update it when components change.
 

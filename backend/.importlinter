@@ -1,0 +1,25 @@
+[importlinter]
+root_packages =
+    core
+    routers
+    agent
+    wallet_engine
+    plugins
+include_external_packages = True
+
+[importlinter:contract:no-upstream-internals]
+name = walletpress never imports backend/rag/scanner/bot/product internals
+type = forbidden
+source_modules =
+    core
+    routers
+    agent
+    wallet_engine
+    plugins
+forbidden_modules =
+    app
+    rugbrain
+    rugmunch_scanner
+    rugmunchbot
+    pry
+ignore_imports =

@@ -78,10 +78,17 @@ class WalletPressAuth {
 
         $api = self::$plugin ? self::$plugin->api() : null;
         if ($api && $api->is_configured()) {
+            // SECURITY (2026-08-31): must check the VERDICT, not just API
+            // reachability. The old `=== null` check accepted ANY signature
+            // whenever the backend answered at all (the endpoint returns an
+            // array with verified:false on bad signatures) — an auth bypass.
             $verified = $api->verify_signature($address, $message, $signature, $chain);
-            if ($verified === null) {
+            if (empty($verified) || empty($verified['verified'])) {
                 return new WP_REST_Response(['error' => 'Signature verification failed'], 401);
             }
+        } else {
+            // No verification backend configured = cannot prove ownership.
+            return new WP_REST_Response(['error' => 'Signature verification unavailable'], 503);
         }
 
         delete_transient('walletpress_nonce_' . $nonce_hash);

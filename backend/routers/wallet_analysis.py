@@ -1,20 +1,31 @@
-"""Wallet Analysis Router — balance checking, risk scoring, transaction history.
+"""Wallet Analysis Router — balance checking + signature verification.
 
-These endpoints connect to public RPC endpoints, blockchain explorers,
-and the RMI Intelligence scanner for comprehensive wallet risk assessment.
+Walletpress is a STANDALONE self-hosted wallet management platform. It has
+NO dependency on RMI/rugmunch services — everything here works from public
+blockchain data and local cryptography only:
 
-Trust: All data comes from public blockchains. We don't fabricate results.
+  * ``GET  /{address}/balance``  — real RPC balance lookup (public data).
+  * ``POST /verify``             — real cryptographic signature verification
+                                   (EVM EIP-191 personal_sign recovery,
+                                   Solana Ed25519). Backs wallet-login.
+
+Removed as AI slop (2026-08-31): /analyze, /transactions (returned
+fabricated empty skeletons), /scan (proxied a foreign RMI dependency with a
+nonexistent path). Wallet RISK scanning lives in rmi-backend's unified
+scanner — a separate product surface, not this app's job.
+
+Trust: All data comes from public blockchains or local cryptography.
+We don't fabricate results.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 
-import httpx
 from fastapi import APIRouter, HTTPException
 
 from wallet_engine.chains import CHAINS, validate_address
+from wallet_engine.signature_verify import verify_message
 
 logger = logging.getLogger("wp.wallet_analysis")
 
@@ -64,121 +75,6 @@ async def get_balance(address: str, chain: str = "solana"):
         }
 
 
-@router.get("/{address}/analyze")
-async def analyze_wallet(address: str, chain: str = "solana"):
-    """Analyze a wallet's activity, holdings, and risk profile.
-
-    Combines on-chain data from multiple sources to provide a
-    comprehensive wallet analysis including:
-    - Balance and token holdings
-    - Transaction frequency and volume
-    - Age and activity level
-    - Risk indicators (mixer usage, suspicious interactions)
-    """
-    chain_info = CHAINS.get(chain.lower())
-    if not chain_info:
-        raise HTTPException(status_code=400, detail=f"Unsupported chain: {chain}")
-
-    if not validate_address(chain, address):
-        raise HTTPException(status_code=400, detail="Invalid address format")
-
-    return {
-        "address": address,
-        "chain": chain,
-        "chain_name": chain_info.name,
-        "analysis": {
-            "balance_usd": None,
-            "transaction_count": None,
-            "first_seen": None,
-            "last_active": None,
-            "token_holdings": [],
-            "risk_score": None,
-            "tags": [],
-        },
-        "note": "Full analysis requires Birdeye, Solscan, or Etherscan API keys. Configure in settings.",
-    }
-
-
-@router.post("/scan")
-async def scan_wallet(address: str, chain: str = "solana", tier: str = "free"):
-    """Deep scan a wallet for rug pull and scam indicators.
-
-    Delegates to RMI Intelligence's scanner for comprehensive
-    wallet risk assessment. The scanner analyzes 21+ risk factors
-    including token concentration, liquidity locks, and social signals.
-
-    Trust: Scan results come from the same engine that powers
-    rugmunch.io. If the RMI scanner is unreachable, returns a
-    graceful degradation with an explanatory note.
-    """
-    chain_info = CHAINS.get(chain.lower())
-    if not chain_info:
-        raise HTTPException(status_code=400, detail=f"Unsupported chain: {chain}")
-
-    if not validate_address(chain, address):
-        raise HTTPException(status_code=400, detail="Invalid address format")
-
-    rmi_backend_url = os.getenv("RMI_BACKEND_URL", "http://rmi-backend:8000")
-    rmi_api_key = os.getenv("RMI_API_KEY", "")
-
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            headers = {}
-            if rmi_api_key:
-                headers["X-API-Key"] = rmi_api_key
-            resp = await client.post(
-                f"{rmi_backend_url}/api/v1/scanner/scan-wallet",
-                json={
-                    "chain": chain,
-                    "address": address,
-                    "depth": "standard" if tier == "pro" else "quick",
-                },
-                headers=headers,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return {
-                    "address": address,
-                    "chain": chain,
-                    "scan_tier": tier,
-                    "risk_assessment": {
-                        "overall_risk": _risk_tier(data.get("risk_score", 0)),
-                        "score": data.get("risk_score", 0),
-                        "factors": data.get("risk_factors", []),
-                        "token_security": {},
-                        "wallet_age": None,
-                        "associated_scams": [],
-                    },
-                    "rmi_scan_id": data.get("scan_id", ""),
-                }
-    except Exception as e:
-        logger.warning("RMI scanner call failed: %s", e)
-
-    return {
-        "address": address,
-        "chain": chain,
-        "scan_tier": tier,
-        "risk_assessment": {
-            "overall_risk": "unknown",
-            "factors": ["RMI scanner unavailable — check connection"],
-            "token_security": {},
-            "wallet_age": None,
-            "associated_scams": [],
-        },
-        "note": "RMI scanner unreachable — check rmi-backend connection.",
-    }
-
-
-def _risk_tier(score: int) -> str:
-    if score >= 70:
-        return "high"
-    if score >= 40:
-        return "medium"
-    if score > 0:
-        return "low"
-    return "unknown"
-
-
 @router.post("/verify")
 async def verify_signature(address: str, message: str, signature: str, chain: str = "solana"):
     """Verify a signed message from a wallet.
@@ -187,29 +83,10 @@ async def verify_signature(address: str, message: str, signature: str, chain: st
     message. This is the same mechanism used for Web3 authentication.
 
     Trust: Signature verification is done entirely server-side using
-    standard cryptographic primitives. We CANNOT forge signatures.
-    """
-    chain_info = CHAINS.get(chain.lower())
-    if not chain_info:
-        raise HTTPException(status_code=400, detail=f"Unsupported chain: {chain}")
-
-    return {
-        "verified": False,
-        "address": address,
-        "chain": chain,
-        "message": message[:50] + "..." if len(message) > 50 else message,
-        "note": "Signature verification requires chain-specific crypto libraries.",
-    }
-
-
-@router.get("/{address}/transactions")
-async def get_transactions(address: str, chain: str = "solana", limit: int = 50):
-    """Get recent transactions for a wallet address.
-
-    Uses public blockchain explorers and RPC endpoints to fetch
-    transaction history. No authentication required.
-
-    Trust: All transaction data comes from public blockchains.
+    standard cryptographic primitives (eth-account ecrecover for EVM,
+    PyNaCl Ed25519 for Solana). We CANNOT forge signatures, and an
+    invalid signature returns ``verified: false`` — never an exception
+    shaped like success.
     """
     chain_info = CHAINS.get(chain.lower())
     if not chain_info:
@@ -218,11 +95,11 @@ async def get_transactions(address: str, chain: str = "solana", limit: int = 50)
     if not validate_address(chain, address):
         raise HTTPException(status_code=400, detail="Invalid address format")
 
+    verified = await verify_message(chain, address, message, signature)
+
     return {
+        "verified": bool(verified),
         "address": address,
         "chain": chain,
-        "limit": limit,
-        "transactions": [],
-        "total": 0,
-        "note": "Connect RPC endpoint or explorer API key to fetch transactions.",
+        "message": message[:50] + "..." if len(message) > 50 else message,
     }

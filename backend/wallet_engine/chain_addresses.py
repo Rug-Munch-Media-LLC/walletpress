@@ -325,6 +325,82 @@ def monero_address(seed32_hex: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Sui — ed25519 → 0x + sha3_256(0x00 || pubkey)[:32]
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def sui_address(ed25519_pubkey: bytes) -> str:
+    """Encode an ed25519 public key as a Sui address.
+
+    Sui address = "0x" + SHA3-256(0x00 || pubkey)[:32].hex()
+
+    The 0x00 byte is the ED25519 flag (signature scheme identifier used by
+    Sui's MultiSig/address derivation). The digest is truncated to 32 bytes.
+
+    Reference: https://github.com/MystenLabs/sui (crates/sui-types/src/
+    crypto.rs — SuiAddress::from ED25519 flag || pubkey, hashed with sha3-256).
+    """
+    if len(ed25519_pubkey) != 32:
+        raise ValueError(f"ed25519 pubkey must be 32 bytes, got {len(ed25519_pubkey)}")
+    digest = hashlib.sha3_256(b"\x00" + ed25519_pubkey).digest()
+    return "0x" + digest[:32].hex()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Aptos — ed25519 → 0x + sha3_256(0x00 || pubkey) (full 32 bytes)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def aptos_address(ed25519_pubkey: bytes) -> str:
+    """Encode an ed25519 public key as an Aptos address.
+
+    Aptos address = "0x" + SHA3-256(pubkey || 0x00).hex() — the FULL 32-byte
+    digest. The 0x00 byte is the ED25519 signature-scheme identifier and is
+    APPENDED AFTER the pubkey (Aptos authentication-key construction:
+    sha3_256(Ed25519PublicKey || SCHEME_IDENTIFIER)), unlike Sui where the
+    flag byte is PREPENDED.
+
+    Verified against the official aptos-sdk (AccountAddress.from_key /
+    Account.load_key) — see tests/test_address_vectors.py.
+
+    Reference: https://github.com/aptos-labs/aptos-core (crates/aptos-types/
+    src/account_address.rs, authentication_key.rs).
+    """
+    if len(ed25519_pubkey) != 32:
+        raise ValueError(f"ed25519 pubkey must be 32 bytes, got {len(ed25519_pubkey)}")
+    digest = hashlib.sha3_256(ed25519_pubkey + b"\x00").digest()
+    return "0x" + digest.hex()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEAR — ed25519 → "ed25519:" + base58(pubkey)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def near_address(ed25519_pubkey: bytes) -> str:
+    """Encode an ed25519 public key as an implicit NEAR account ID.
+
+    NEAR implicit address = "ed25519:" + base58(pubkey_64_bytes)
+
+    Note: NEAR's implicit account is base58 of the 32-byte pubkey, but the
+    "ed25519:" prefixed form encodes the FULL 64-byte public key
+    (pubkey || nothing — nacl's crypto_sign_seed_keypair returns the 32-byte
+    public key; the 64-byte form is pubkey || nothing for verification keys).
+    The canonical implicit account ID is base58(pubkey_32_bytes) with no
+    prefix. We produce the "ed25519:"-prefixed form used by near-cli for
+    access keys, encoding the 32-byte public key.
+
+    Reference: https://docs.near.org/docs/roles/integrator/implicit-accounts
+    and near-sdk / near-cli key encoding (base58 of raw ed25519 pubkey).
+    """
+    if len(ed25519_pubkey) != 32:
+        raise ValueError(f"ed25519 pubkey must be 32 bytes, got {len(ed25519_pubkey)}")
+    import base58
+
+    return "ed25519:" + base58.b58encode(ed25519_pubkey).decode()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Substrate (Polkadot/Kusama) — sr25519, requires substrate-interface
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -495,6 +571,11 @@ ADDRESS_ENCODERS = {
     "ksm": ("substrate", 2),
     # BCH
     "bch": ("bch", None),
+    # Sui / Aptos / NEAR — ed25519 with chain-specific encodings
+    "sui": ("sui", None),
+    "apt": ("aptos", None),
+    "aptos": ("aptos", None),
+    "near": ("near", None),
 }
 
 
@@ -514,8 +595,11 @@ def encode_address(family: str, *args) -> str:
                - nano: (ed25519_pubkey)
                - algorand: (ed25519_pubkey)
                - monero: (seed32_hex)
-               - substrate: (mnemonic, ss58_prefix)
-               - bch: (privkey_bytes)
+                - substrate: (mnemonic, ss58_prefix)
+                - bch: (privkey_bytes)
+                - sui: (ed25519_pubkey)
+                - aptos: (ed25519_pubkey)
+                - near: (ed25519_pubkey)
     """
     if family == "bech32":
         return cosmos_address(args[0], args[1])
@@ -539,6 +623,12 @@ def encode_address(family: str, *args) -> str:
         return substrate_ss58_address(args[0], args[1])
     if family == "bch":
         return bitcoin_cash_cashaddr(args[0])
+    if family == "sui":
+        return sui_address(args[0])
+    if family == "aptos":
+        return aptos_address(args[0])
+    if family == "near":
+        return near_address(args[0])
     if family == "zcash_t":
         return zcash_t_address(args[0])
     if family == "cardano":

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -47,6 +48,70 @@ _RECEIPT_PUBKEY: bytes | None = None
 _RECEIPT_KEY_PATH: Path | None = None
 
 
+def _derive_wrap_key(salt: bytes) -> bytes:
+    """Derive a KEK wrapping key from the vault password (Argon2id, same params as vault.py)."""
+    from argon2.low_level import Type as _Argon2Type, hash_secret_raw as _argon2id_kdf
+
+    from .config import cfg
+
+    return _argon2id_kdf(
+        secret=cfg.vault_password.encode(),
+        salt=salt,
+        time_cost=3,
+        memory_cost=65536,
+        parallelism=4,
+        hash_len=32,
+        type=_Argon2Type.ID,
+    )
+
+
+def _wrap_receipt_key(key_bytes: bytes) -> bytes:
+    """Encrypt the receipt key at rest with the vault KEK (AES-256-GCM).
+
+    Format: salt(16) + nonce(12) + ciphertext. Returns b"" if no vault
+    password is configured (dev mode) — caller writes plaintext with a warning.
+    """
+    from .config import cfg
+
+    if not cfg.vault_password:
+        logger.warning(
+            "WP_VAULT_PASSWORD not set — receipt signing key will be stored "
+            "UNENCRYPTED on disk (dev mode only)."
+        )
+        return b""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(_derive_wrap_key(salt))
+    return salt + nonce + aesgcm.encrypt(nonce, key_bytes, None)
+
+
+def _unwrap_receipt_key(raw: bytes) -> bytes:
+    """Decrypt a KEK-wrapped receipt key. Falls back to plaintext for legacy files."""
+    from .config import cfg
+
+    if not cfg.vault_password:
+        return raw
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    salt, nonce, ct = raw[:16], raw[16:28], raw[28:]
+    try:
+        aesgcm = AESGCM(_derive_wrap_key(salt))
+        return aesgcm.decrypt(nonce, ct, None)
+    except (InvalidTag, ValueError):
+        # Legacy plaintext key file (pre-KEK). Accept only if it decrypts to a
+        # plausible 64-byte keypair blob; otherwise the file is corrupt/tampered.
+        if len(raw) == 64:
+            logger.warning(
+                "Receipt key file is not KEK-wrapped (legacy plaintext). "
+                "Re-wrap it by deleting the file so a new wrapped key is generated."
+            )
+            return raw
+        raise
+
+
 def _ensure_receipt_key():
     global _RECEIPT_KEY, _RECEIPT_PUBKEY, _RECEIPT_KEY_PATH
     if _RECEIPT_KEY is not None:
@@ -55,16 +120,19 @@ def _ensure_receipt_key():
 
     _RECEIPT_KEY_PATH = cfg.data_dir / ".receipt_signing_key"
     if _RECEIPT_KEY_PATH.exists():
-        raw = _RECEIPT_KEY_PATH.read_bytes()
+        raw = _unwrap_receipt_key(_RECEIPT_KEY_PATH.read_bytes())
         _RECEIPT_KEY = raw[:32]
         _RECEIPT_PUBKEY = raw[32:]
     else:
         from nacl.bindings import crypto_sign_keypair
 
         _RECEIPT_PUBKEY, _RECEIPT_KEY = crypto_sign_keypair()
+        payload = _wrap_receipt_key(_RECEIPT_KEY + _RECEIPT_PUBKEY)
         _RECEIPT_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _RECEIPT_KEY_PATH.write_bytes(_RECEIPT_KEY + _RECEIPT_PUBKEY)
-        _RECEIPT_KEY_PATH.chmod(0o600)
+        # Atomic creation with 0600 permissions — no world-readable window.
+        fd = os.open(str(_RECEIPT_KEY_PATH), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(payload)
 
 
 def sign_receipt(order_id: str, chain: str, count: int, total_usd: float, timestamp: float) -> str:
@@ -425,7 +493,7 @@ class ProofOfGeneration:
         proof_path = self.get_proof_path(leaf_hash)
         if not proof_path:
             # Single leaf: the leaf IS the root
-            return leaf_hash == root_hash
+            return hmac.compare_digest(leaf_hash, root_hash)
         current = bytes.fromhex(leaf_hash)
         for step in proof_path:
             sibling = bytes.fromhex(step["sibling_hash"])
@@ -433,7 +501,7 @@ class ProofOfGeneration:
                 current = hashlib.sha256(sibling + current).digest()
             else:
                 current = hashlib.sha256(current + sibling).digest()
-        return current.hex() == root_hash
+        return hmac.compare_digest(current.hex(), root_hash)
 
     def commit(self, root_hash: str, leaf_count: int, commitment_chain: str = "local") -> dict:
         """Record a Merkle root as committed.
@@ -688,7 +756,9 @@ class ProofOfGeneration:
             return {"verified": False, "reason": "No attestation found for this wallet"}
 
         pub_key_hash = hashlib.sha256(public_key_hex.encode()).hexdigest() if public_key_hex else ""
-        key_match = not pub_key_hash or attest.get("public_key_hash") == pub_key_hash
+        key_match = not pub_key_hash or hmac.compare_digest(
+            attest.get("public_key_hash") or "", pub_key_hash
+        )
 
         leaf_hash = attest["leaf_hash"]
         root_hash = attest.get("root_hash", "")

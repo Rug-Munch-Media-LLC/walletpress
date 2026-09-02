@@ -14,6 +14,7 @@ All tools check safety() before executing. WRITE tools go through confirm().
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -361,7 +362,7 @@ def resurrect_agent(key: str) -> dict:
     if not KILL_KEY_FILE.exists():
         return {"error": "No kill key file found. Manual override required."}
     stored_key = KILL_KEY_FILE.read_text().strip()
-    if key != stored_key:
+    if not hmac.compare_digest(key, stored_key):
         return {"error": "Invalid resurrection key"}
     KILL_FILE.unlink(missing_ok=True)
     KILL_KEY_FILE.unlink(missing_ok=True)
@@ -793,9 +794,9 @@ def verify_audit_chain() -> dict:
                 prev_hash + r["id"] + str(r["timestamp"]) + r["action"] + r["params"] + r["result"]
             ).encode()
         ).hexdigest()
-        if r["hash"] != expected_hash:
+        if not hmac.compare_digest(r["hash"], expected_hash):
             issues.append(f"Hash mismatch at {r['id']}")
-        if r["prev_hash"] != prev_hash:
+        if not hmac.compare_digest(r["prev_hash"], prev_hash):
             issues.append(
                 f"Chain broken at {r['id']}: expected prev_hash={prev_hash}, got {r['prev_hash']}"
             )

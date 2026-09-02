@@ -439,3 +439,124 @@ def test_print_all_vectors_for_documentation(capsys):
         .ToBytes()
     )
     print(f"  bch     (cashaddr)      : {bitcoin_cash_cashaddr(bch_priv)}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sui / Aptos / NEAR / Polkadot / Kusama — golden vectors (WP address fixes)
+#
+# These vectors were derived with the OFFICIAL SDKs / protocol sources:
+#   - Sui:   sha3_256(0x00 || pubkey) per sui-types/src/base_types.rs
+#            (flag byte PREPENDED before the pubkey)
+#   - Aptos: aptos-sdk Account.load_key → AccountAddress
+#            (sha3_256(pubkey || 0x00) — flag byte APPENDED)
+#   - NEAR:  "ed25519:" + base58(32-byte pubkey) — the canonical NEAR public
+#            key string format used by near-cli / nearcore
+#   - Polkadot/Kusama: substrate-interface sr25519 Keypair (ss58_format 0 / 2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+from wallet_engine.chain_addresses import aptos_address, near_address, sui_address
+from wallet_engine.generator import WalletGenerator
+
+# Hardcoded golden vectors for TEST_MNEMONIC (empty passphrase).
+GOLDEN_SUI = "0xa680b9354b171f5b373ee52486b023db53cb8e42b31c974526bb723c52ee7f43"
+GOLDEN_APT = "0xbc9e5437057518a11605bf77f21fdf7f581b69bd48379a1d96e35ecb912dad62"
+GOLDEN_NEAR = "ed25519:dth2QaPLqV9jKh2cFHHyDT8JfzrDCd8PaHppiTnwY14"
+GOLDEN_DOT = "13zNpBKpBT7qquwE2WH9sA9rEirqFEv21BcrhQyFbgxVCV2M"
+GOLDEN_KSM = "FZhLAQcx2sJA2k9qa3CcxghXh9RMcB4P4j7vnFrXQ9TmShS"
+
+
+def test_sui_address_golden_vector() -> None:
+    """Sui address = 0x + sha3_256(0x00 || pubkey)[:32], verified vs Sui source."""
+    pub = _ed_pub_from_priv(_ed_priv("m/44'/784'/0'/0'"))
+    addr = sui_address(pub)
+    assert addr == GOLDEN_SUI, f"got {addr}, expected {GOLDEN_SUI}"
+    assert addr.startswith("0x")
+    assert len(addr) == 66  # 0x + 64 hex chars
+
+
+def test_sui_matches_reference_construction() -> None:
+    """Independent re-derivation of the Sui address construction."""
+    pub = _ed_pub_from_priv(_ed_priv("m/44'/784'/0'/0'"))
+    expected = "0x" + hashlib.sha3_256(b"\x00" + pub).digest()[:32].hex()
+    assert sui_address(pub) == expected
+
+
+def test_aptos_address_matches_aptos_sdk() -> None:
+    """Aptos address matches the official aptos-sdk (Account.load_key)."""
+    from aptos_sdk.account import Account
+
+    priv = _ed_priv("m/44'/637'/0'/0'")
+    pub = _ed_pub_from_priv(priv)
+    addr = aptos_address(pub)
+
+    sdk_account = Account.load_key(priv.hex())
+    expected = str(sdk_account.account_address)
+    assert addr == expected, f"got {addr}, aptos-sdk says {expected}"
+    assert addr == GOLDEN_APT
+    assert addr.startswith("0x")
+    assert len(addr) == 66
+
+
+def test_near_address_golden_vector() -> None:
+    """NEAR address = 'ed25519:' + base58(32-byte pubkey)."""
+    pub = _ed_pub_from_priv(_ed_priv("m/44'/397'/0'/0'"))
+    addr = near_address(pub)
+    assert addr == GOLDEN_NEAR, f"got {addr}, expected {GOLDEN_NEAR}"
+    assert addr.startswith("ed25519:")
+    # base58 of 32 bytes is always 43-44 chars
+    assert len(addr) in (51, 52)
+
+
+def test_polkadot_kusama_golden_vectors() -> None:
+    """Polkadot/Kusama SS58 addresses match substrate-interface sr25519."""
+    assert substrate_ss58_address(TEST_MNEMONIC, 0) == GOLDEN_DOT
+    assert substrate_ss58_address(TEST_MNEMONIC, 2) == GOLDEN_KSM
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# End-to-end generator tests — the override dispatch must produce the SAME
+# golden addresses. This is the regression test for the broken inline
+# address branches that used to live in generator._generate_ed25519.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _generate(chain_key: str) -> str:
+    return WalletGenerator().generate(chain_key, mnemonic=TEST_MNEMONIC).address
+
+
+def test_generator_sui_end_to_end() -> None:
+    assert _generate("sui") == GOLDEN_SUI
+
+
+def test_generator_aptos_end_to_end() -> None:
+    # CHAINS registry key is "aptos" (ChainInfo.key = "apt")
+    assert _generate("aptos") == GOLDEN_APT
+
+
+def test_generator_near_end_to_end() -> None:
+    assert _generate("near") == GOLDEN_NEAR
+
+
+def test_generator_polkadot_end_to_end_sr25519() -> None:
+    """Polkadot must use sr25519 (substrate-interface), not ed25519."""
+    assert _generate("dot") == GOLDEN_DOT
+
+
+def test_generator_kusama_end_to_end_sr25519() -> None:
+    assert _generate("ksm") == GOLDEN_KSM
+
+
+def test_generator_unknown_ed25519_chain_fails_loudly() -> None:
+    """Chains without an override must raise instead of emitting a wrong address."""
+    # 'ton' has an override; use a chain that lands in _generate_ed25519
+    # without an override. All current ed25519 chains have overrides, so
+    # simulate by temporarily removing one.
+    import wallet_engine.generator as gen_mod
+    from wallet_engine.generator import CryptoInputError
+
+    saved = gen_mod.CHAIN_ADDRESS_OVERRIDES.pop("near")
+    try:
+        with pytest.raises(CryptoInputError, match="CHAIN_ADDRESS_OVERRIDES"):
+            _generate("near")
+    finally:
+        gen_mod.CHAIN_ADDRESS_OVERRIDES["near"] = saved

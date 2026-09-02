@@ -212,11 +212,6 @@ class Vault:
 
     def put(self, wallet: WalletEntry) -> bool:
         with self._conn() as conn:
-            # Idempotent migration: ignore "duplicate column" if already applied.
-            with suppress(Exception):
-                conn.execute("ALTER TABLE wallets ADD COLUMN wallet_group TEXT DEFAULT ''")
-                conn.commit()
-
             try:
                 conn.execute(
                     """INSERT OR REPLACE INTO wallets

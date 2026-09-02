@@ -186,6 +186,10 @@ CHAIN_ADDRESS_OVERRIDES: dict[str, dict] = {
     # Filecoin — secp256k1 with f1 prefix
     "fil": {"curve": "secp256k1", "address_family": "filecoin"},
     # Nano — ed25519 with custom format
+    # NOTE: the CHAINS registry key is "nano" (ChainInfo.key="nano"); "xno"
+    # is kept as a symbol alias. Previously only "xno" was registered, so
+    # generate("nano") silently produced a wrong base58-truncated address.
+    "nano": {"curve": "ed25519", "address_family": "nano"},
     "xno": {"curve": "ed25519", "address_family": "nano"},
     # Algorand — ed25519 with SHA-512/256 checksum
     "algo": {"curve": "ed25519", "address_family": "algorand"},
@@ -197,6 +201,16 @@ CHAIN_ADDRESS_OVERRIDES: dict[str, dict] = {
     "zec": {"curve": "secp256k1", "address_family": "zcash_t"},
     # Cardano — Kholaw (BIP32-Ed25519) via pycardano
     "ada": {"curve": "ed25519_kholaw", "address_family": "cardano", "network": "mainnet"},
+    # Sui — ed25519, sha3_256(0x00 || pubkey)[:32]
+    "sui": {"curve": "ed25519", "address_family": "sui"},
+    # Aptos — ed25519, sha3_256(0x00 || pubkey) full digest
+    "apt": {"curve": "ed25519", "address_family": "aptos"},
+    "aptos": {"curve": "ed25519", "address_family": "aptos"},
+    # NEAR — ed25519, "ed25519:" + base58(pubkey)
+    "near": {"curve": "ed25519", "address_family": "near"},
+    # Polkadot/Kusama — sr25519 via substrate-interface, SS58 with network prefix
+    "dot": {"curve": "sr25519", "address_family": "substrate", "ss58_prefix": 0},
+    "ksm": {"curve": "sr25519", "address_family": "substrate", "ss58_prefix": 2},
 }
 
 
@@ -340,8 +354,6 @@ class WalletGenerator:
                 result = self._generate_ed25519(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.RIPPLE:
                 result = self._generate_ripple(chain, mnemonic, passphrase, effective_path)
-            elif chain.family == ChainFamily.SUBSTRATE:
-                result = self._generate_ss58(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.COSMOS:
                 result = self._generate_secp256k1(chain, mnemonic, passphrase, effective_path)
             elif chain.family == ChainFamily.ALGORAND or chain.family == ChainFamily.TEZOS:
@@ -358,6 +370,11 @@ class WalletGenerator:
                 result = self._generate_secp256k1(chain, mnemonic, passphrase, effective_path)
             else:
                 result = self._generate_secp256k1(chain, mnemonic, passphrase, effective_path)
+        except CryptoInputError:
+            # Input/config errors (e.g. missing CHAIN_ADDRESS_OVERRIDES entry)
+            # are caller errors — surface them as-is (HTTP 400), not as
+            # internal crypto failures (HTTP 500).
+            raise
         except Exception as e:
             chain_info_str = f"{chain_key}/{chain.name}"
             _crypto_log_error(logger, "generate", {"chain": chain_info_str, "label": label})
@@ -537,19 +554,17 @@ class WalletGenerator:
             priv_hex = sk_bytes.hex()[:64]
             pub = pub_bytes
 
-            if chain.key == "near":
-                address = pub.hex()
-            elif chain.key in ("sui", "apt", "aptos"):
-                address = "0x" + pub.hex()
-            elif chain.key == "ada":
-                address = "addr1" + base58.b58encode(pub).decode()[:50]
-            elif chain.key == "sol":
+            # NOTE: chains with non-trivial address formats (near, sui, apt,
+            # aptos, ada, xlm, dot, ksm, ...) MUST go through
+            # CHAIN_ADDRESS_OVERRIDES — see _generate_with_override. If a
+            # chain lands here without an override, fail loudly instead of
+            # silently producing a wrong (fund-losing) address.
+            if chain.key == "sol":
                 address = base58.b58encode(pub).decode()
-            elif chain.key == "xlm":
-                addr_bytes = bytes([6 << 3]) + pub[:32]
-                address = base58.b58encode(addr_bytes).decode()
             else:
-                address = base58.b58encode(pub).decode()[:44]
+                raise CryptoInputError(
+                    f"No address encoder for {chain.key} — add to CHAIN_ADDRESS_OVERRIDES"
+                )
 
             return GeneratedWallet(
                 chain="",
@@ -632,43 +647,6 @@ class WalletGenerator:
         except Exception as e:
             _crypto_log_error(logger, "_generate_ripple")
             raise CryptoError(f"Ripple wallet generation failed: {e}") from e
-
-    def _generate_ss58(
-        self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
-    ) -> GeneratedWallet:
-        try:
-            seed = self._seed_from_mnemonic(mnemonic, passphrase)
-            effective_path = path or chain.hd_path or "m/44'/354'/0'/0/0"
-            sk_bytes, pub_bytes = self._derive_ed25519_key(seed, effective_path)
-            priv_hex = sk_bytes.hex()[:64]
-            pub = pub_bytes
-
-            ss58_prefix_map = {"dot": 0, "ksm": 2}
-            prefix = ss58_prefix_map.get(chain.key, 0)
-
-            prefix_bytes = bytes([prefix])
-            payload = prefix_bytes + pub[:32]
-            ss58_hash = hashlib.blake2b(payload, digest_size=64).digest()
-            checksum = ss58_hash[:2]
-            address = base58.b58encode(payload + checksum).decode()
-
-            return GeneratedWallet(
-                chain="",
-                chain_name="",
-                symbol=chain.symbol,
-                address=address,
-                private_key_hex=priv_hex,
-                public_key_hex=pub.hex(),
-                address_type="ss58",
-                derivation_path=effective_path,
-            )
-        except CryptoInputError:
-            raise
-        except Exception as e:
-            _crypto_log_error(
-                logger, "_generate_ss58", {"chain": chain.key if hasattr(chain, "key") else "?"}
-            )
-            raise CryptoError(f"SS58 wallet generation failed: {e}") from e
 
     def _generate_monero(
         self, chain: Any, mnemonic: str, passphrase: str = "", path: str = ""
@@ -764,6 +742,26 @@ class WalletGenerator:
                     public_key_hex=pay_pub.hex(),
                     derivation_path="m/1852'/1815'/0'/0/0 (payment) + m/1852'/1815'/0'/2/0 (stake)",
                     address_type=address_family,
+                )
+
+            # Substrate (Polkadot/Kusama) uses sr25519 — NOT derivable with
+            # SLIP-10 ed25519 BIP32. substrate-interface handles the sr25519
+            # keypair generation from the mnemonic (BIP39 seed → sr25519 mini
+            # secret) and the SS58 encoding with the network prefix.
+            if curve == "sr25519":
+                from substrateinterface import Keypair
+
+                kp = Keypair.create_from_uri(mnemonic, ss58_format=override["ss58_prefix"])
+                priv_hex = kp.private_key.hex() if kp.private_key else ""
+                return GeneratedWallet(
+                    chain="",
+                    chain_name="",
+                    symbol="",
+                    address=kp.ss58_address,
+                    private_key_hex=priv_hex,
+                    public_key_hex=kp.public_key.hex(),
+                    derivation_path=path,
+                    address_type="substrate",
                 )
 
             seed = self._seed_from_mnemonic(mnemonic, passphrase)

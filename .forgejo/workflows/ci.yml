@@ -238,6 +238,17 @@ jobs:
           name: trivy-results
           path: trivy-results.sarif
 
+  docker-lint:
+    runs-on: docker-x64
+    container:
+      image: hadolint/hadolint:latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Hadolint root Dockerfile
+        run: hadolint --failure-threshold error Dockerfile
+      - name: Hadolint backend Dockerfile
+        run: hadolint --failure-threshold error backend/Dockerfile
+
   shellcheck:
     runs-on: docker-x64
     container:

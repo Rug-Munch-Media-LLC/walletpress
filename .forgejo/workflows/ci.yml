@@ -296,6 +296,30 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
           grype dir:. --fail-on critical || echo "::warning::critical vulns in tree"
 
+  # ─── Performance Smoke (k6) ──────────────────────────────────────────
+  k6-smoke:
+    # k6 needs a RUNNING backend to test against. In PR CI the full stack
+    # would be required, and secrets are not available in PR context.
+    # Runs on schedule against the live deployment instead.
+    # Non-blocking (continue-on-error) until a test environment is
+    # provisioned; graduate to blocking by removing continue-on-error.
+    if: github.event_name == 'schedule'
+    continue-on-error: true
+    runs-on: docker-x64
+    container:
+      image: grafana/k6:latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Create results directory
+        run: mkdir -p tests/k6/results
+      - name: Run k6 smoke test
+        run: k6 run tests/k6/smoke.js --summary-export=tests/k6/results/smoke-summary.json
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: k6-smoke-report
+          path: tests/k6/results/
+
   # ── Frontend Golden Pipeline: web-quality gate for static marketing pages ──
   # walletpress.cc serves static HTML (marketing/*.html + root legal pages).
   web-quality:

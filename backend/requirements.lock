@@ -188,7 +188,7 @@ bitarray==3.11.0 \
     --hash=sha256:fcc8d9723956af19afb215ffb82a39ab810bc8bca2000640b3fd8c884307a6f3 \
     --hash=sha256:ff7cd750397eb61cb43bd368a4e1f7ce8897ab3bd26e7e5b90a60ec339588df0
     # via pytoniq-core-fork
-cbor2==5.9.0 \
+cbor2==5.6.5 \
     --hash=sha256:0322296b9d52f55880e300ba8ba09ecf644303b99b51138bbb1c0fb644fa7c3e \
     --hash=sha256:0485d3372fc832c5e16d4eb45fa1a20fc53e806e6c29a1d2b0d3e176cedd52b9 \
     --hash=sha256:08388ea54195738602b4c4999966bcaef6f0b17d293c9658658409d9fff96f57 \

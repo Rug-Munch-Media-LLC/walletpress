@@ -28,7 +28,8 @@ bitcash>=1.2.0
 monero>=0.0.4
 substrate-interface>=1.8.0
 pycardano>=0.19.0   # Cardano Kholaw (BIP32-Ed25519 IOHK) — 1.1 MB disk
-aptos-sdk>=2.0.0    # Aptos official SDK — golden-vector reference for apt addresses
+cbor2>=5.6.5,<6.0.0 # pycardano imports FrozenDict (removed in cbor2 6.0)
+aptos-sdk>=0.11.0    # Aptos official SDK — golden-vector reference for apt addresses
 
 python-multipart>=0.0.31
 mcp>=1.25.0

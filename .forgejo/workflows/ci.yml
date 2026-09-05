@@ -351,3 +351,19 @@ jobs:
         run: |
           curl -sSfL https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin lychee
           lychee --offline --no-progress --exclude-mail 'marketing/**/*.html' '*.html'
+
+  # ── Changelog (git-cliff) ─────────────────────────────────────
+  # Verify a changelog can be generated from conventional commits.
+  # Runs in the ephemeral CI workspace, so the committed CHANGELOG.md
+  # is never clobbered.
+  changelog:
+    runs-on: docker-x64
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Install git-cliff
+        run: pip install git-cliff
+      - name: Verify changelog generation
+        run: git-cliff --strip header -o CHANGELOG.md

@@ -17,6 +17,7 @@ cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 @pytest.fixture
 def client():
     from main import app
+
     app.state.vault = None
     app.state.key_store = None
     app.state.audit = None

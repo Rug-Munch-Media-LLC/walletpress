@@ -1,4 +1,5 @@
 """Tests: chain definitions are valid and generate keys."""
+
 import os
 
 os.environ["WP_VAULT_PASSWORD"] = "test"
@@ -72,12 +73,22 @@ def test_context_manager_zeroes_key():
 
 
 def test_eip55_checksum():
-    w = gen.generate("eth", mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
+    w = gen.generate(
+        "eth",
+        mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    )
     addr = w.address
-    assert addr == "0x9858EfFD232B4033E47d90003D41EC34EcaEda94", f"Expected known EIP55 address, got {addr}"
+    assert addr == "0x9858EfFD232B4033E47d90003D41EC34EcaEda94", (
+        f"Expected known EIP55 address, got {addr}"
+    )
 
 
 def test_solana_base58():
-    w = gen.generate("sol", mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
+    w = gen.generate(
+        "sol",
+        mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    )
     assert w.address.startswith("H") or w.address.isprintable()
-    assert len(w.address) == 44, f"Expected 44-char base58 Solana address, got {len(w.address)}: {w.address}"
+    assert len(w.address) == 44, (
+        f"Expected 44-char base58 Solana address, got {len(w.address)}: {w.address}"
+    )

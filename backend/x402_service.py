@@ -46,7 +46,12 @@ app = FastAPI(
     description="Pay-per-wallet generation. No account needed.",
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://rugmunch.io", "https://walletpress.rugmunch.io"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 # ── RFC 7807 Error Handlers ─────────────────────────────────────────
 from fastapi.responses import JSONResponse

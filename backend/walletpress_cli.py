@@ -266,7 +266,7 @@ WP_PORT=8010
 WP_DATA_DIR=/data
 WP_ADMIN_KEY=change-me-to-a-random-string
 WP_VAULT_PASSWORD=change-me-to-a-strong-password
-WP_CORS_ORIGINS=*
+WP_CORS_ORIGINS=http://localhost:8010
 WP_RATE_LIMIT=60
 WP_MAX_BATCH=100
 """)

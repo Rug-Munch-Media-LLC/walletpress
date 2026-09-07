@@ -17,6 +17,7 @@ from pathlib import Path
 os.environ["WP_VAULT_PASSWORD"] = "test-vault-password-1234567890"
 os.environ["WP_DATA_DIR"] = tempfile.mkdtemp(prefix="wp_test_wallet_")
 os.environ["WP_ADMIN_KEY"] = "test-admin-key-12345"
+ADMIN_HEADERS = {"X-API-Key": "test-admin-key-12345"}
 os.environ["WP_RATE_LIMIT"] = "0"
 
 import pytest
@@ -161,7 +162,8 @@ async def test_balance_fetcher_evm(client, httpx_mock):
         status_code=200,
     )
     resp = await client.get(
-        "/api/v1/wallet/0x8b991D96E16a2232174FFACb471966ed67290D4E/balance?chain=eth"
+        "/api/v1/wallet/0x8b991D96E16a2232174FFACb471966ed67290D4E/balance?chain=eth",
+        headers=ADMIN_HEADERS,
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -175,7 +177,8 @@ async def test_balance_fetcher_evm(client, httpx_mock):
 async def test_balance_fetcher_unsupported_chain(client):
     """Unsupported chain returns 400."""
     resp = await client.get(
-        "/api/v1/wallet/0x8b991D96E16a2232174FFACb471966ed67290D4E/balance?chain=notachain"
+        "/api/v1/wallet/0x8b991D96E16a2232174FFACb471966ed67290D4E/balance?chain=notachain",
+        headers=ADMIN_HEADERS,
     )
     assert resp.status_code == 400
 
@@ -183,7 +186,7 @@ async def test_balance_fetcher_unsupported_chain(client):
 @pytest.mark.asyncio
 async def test_balance_fetcher_invalid_address(client):
     """Invalid address format returns 400."""
-    resp = await client.get("/api/v1/wallet/notanaddress/balance?chain=eth")
+    resp = await client.get("/api/v1/wallet/notanaddress/balance?chain=eth", headers=ADMIN_HEADERS)
     assert resp.status_code == 400
 
 

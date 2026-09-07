@@ -99,6 +99,29 @@ def _load_key(key_or_path: str) -> str:
     return key_or_path
 
 
+def _is_rsa_public_key(key: str) -> bool:
+    """Detect PEM-encoded RSA public keys (JWKS / env-provided)."""
+    markers = (
+        "-----BEGIN PUBLIC KEY-----",
+        "-----BEGIN RSA PUBLIC KEY-----",
+        "-----BEGIN CERTIFICATE-----",
+    )
+    return any(m in key for m in markers)
+
+
+def _allowed_algorithms(key: str) -> list[str]:
+    """Algorithm allowlist derived from the configured key type.
+
+    Audit fix (2026-09-06): when an RSA public key is configured, ONLY RS256
+    is accepted. This rejects the classic HS256/public-key confusion attack
+    where an attacker signs a token with the (public) RSA key as an HMAC
+    secret. HS256 is only permitted when a symmetric secret is configured.
+    """
+    if _is_rsa_public_key(key):
+        return ["RS256"]
+    return ["HS256"]
+
+
 def validate_rmi_jwt(token: str) -> dict[str, Any] | None:
     """Validate a JWT issued by rmi-backend.
 
@@ -116,9 +139,16 @@ def validate_rmi_jwt(token: str) -> dict[str, Any] | None:
         logger.error("No JWT public key available for validation")
         return None
 
-    algorithm = "RS256" if _JWT_ALGORITHM == "RS256" else "HS256"
+    allowed = _allowed_algorithms(key)
+    if _JWT_ALGORITHM not in allowed:
+        logger.error(
+            "JWT algorithm %s not allowed for configured key type (allowed: %s)",
+            _JWT_ALGORITHM,
+            allowed,
+        )
+        return None
     try:
-        payload = jwt.decode(token, key, algorithms=[algorithm])
+        payload = jwt.decode(token, key, algorithms=allowed)
     except JWTError as exc:
         logger.warning("JWT validation failed: %s", exc)
         return None

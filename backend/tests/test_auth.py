@@ -144,10 +144,10 @@ async def test_write_with_admin_key_succeeds(client):
     assert resp.json()["api_key"].startswith("wp_")
 
 
-async def test_read_without_key_allowed(client):
-    """GET on a non-team path is allowed without a key."""
+async def test_read_without_key_rejected(client):
+    """Audit fix: GET requires auth on all endpoints (no unauthenticated reads)."""
     resp = await client.get("/api/v1/chain-vault/config")
-    assert resp.status_code == 200
+    assert resp.status_code == 401
 
 
 async def test_health_is_public(client):

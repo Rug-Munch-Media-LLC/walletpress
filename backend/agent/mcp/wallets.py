@@ -362,18 +362,37 @@ def wallet_sweep(from_wallet_id: str, to_address: str) -> dict:
         from_wallet_id: Source wallet ID from vault
         to_address: Destination address (must be valid for the chain)
     """
-    from core.balance_fetcher import EVM_RPC
+    from routers.balance_fetcher import EVM_RPC
 
     # Address safety check
     vault = get_vault()
     wallet = vault.get(from_wallet_id)
-    chain = wallet.chain if wallet else "unknown"
+    if not wallet:
+        return {"error": f"Wallet {from_wallet_id} not found"}
+    chain = wallet.chain
     addr_check = check_address(to_address, chain)
     if not addr_check["allowed"]:
         return {"error": f"Address blocked: {addr_check['reason']}"}
 
-    # Spending limit check
-    limit_check = check_spending_limit(chain, 0)
+    # Spending limit check — uses the REAL on-chain balance as the proposed
+    try:
+        import asyncio
+
+        from routers.balance_fetcher import fetch_balance
+
+        bal = asyncio.run(fetch_balance(chain, wallet.address))
+        spend_amount = float(bal.get("balance_decimal", 0) or 0)
+        if bal.get("error") or bal.get("source") in ("unsupported", "no-rpc"):
+            return {
+                "error": (
+                    f"Cannot verify on-chain balance for {chain} — refusing to "
+                    "sweep without a verified amount for the spending-limit check"
+                )
+            }
+    except Exception as e:
+        return {"error": f"Balance verification failed: {e}"}
+
+    limit_check = check_spending_limit(chain, spend_amount)
     if not limit_check["allowed"]:
         return {"error": f"Spending limit exceeded: {limit_check['exceeded']}"}
 
@@ -384,10 +403,6 @@ def wallet_sweep(from_wallet_id: str, to_address: str) -> dict:
     )
     if hitl:
         return hitl
-
-    wallet = vault.get(from_wallet_id)
-    if not wallet:
-        return {"error": f"Wallet {from_wallet_id} not found"}
 
     # EVM chain: build, sign, and broadcast via tx_broadcaster
     if chain in EVM_RPC:

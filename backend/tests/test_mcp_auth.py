@@ -118,7 +118,8 @@ def test_health_public(client):
 
 def test_x402_marketplace_still_mounted(client):
     # The root-mounted x402 app must still be reachable (mount reorder).
-    r = client.get("/api/v1/marketplace/pricing")
+    # Audit fix: all endpoints require auth — pricing needs a key now.
+    r = client.get("/api/v1/marketplace/pricing", headers={"X-API-Key": ADMIN_KEY})
     assert r.status_code == 200
 
 

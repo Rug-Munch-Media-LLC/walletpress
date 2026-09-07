@@ -110,11 +110,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ── Pricing (REPLACE WITH YOUR OWN VALUES) ─────────────────────────
+# ── Pricing (env-configurable; enforced server-side at gate time) ──
 
-PRICE_PER_WALLET = 0.01  # TODO: Replace with your pricing
-MIN_ORDER_USD = 1.00  # TODO: Minimum order in USD
-FREE_WALLETS = 3  # TODO: Free tier limit
+PRICE_PER_WALLET = float(os.getenv("WP_X402_PRICE_PER_WALLET", "0.01"))
+MIN_ORDER_USD = float(os.getenv("WP_X402_MIN_ORDER_USD", "1.00"))
+FREE_WALLETS = int(os.getenv("WP_X402_FREE_WALLETS", "3"))
 
 PAYMENT_ADDRESS = os.getenv("WP_PAYMENT_ADDRESS", "YOUR_PAYMENT_ADDRESS_HERE")
 PAYMENT_CHAIN = "solana"
@@ -172,6 +172,55 @@ def calc_price(count: int) -> float:
     In production, implement volume discounts and tiered pricing here.
     """
     return round(count * PRICE_PER_WALLET, 2)
+
+
+def _get_free_wallets_used(client_ip: str) -> int:
+    """Count free-tier wallets already issued to this client (server-verified)."""
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS free_tier_usage (
+            client_ip TEXT PRIMARY KEY, wallets INTEGER NOT NULL DEFAULT 0
+        );
+    """)
+    row = conn.execute(
+        "SELECT COALESCE(SUM(wallets), 0) FROM free_tier_usage WHERE client_ip = ?",
+        (client_ip,),
+    ).fetchone()
+    conn.close()
+    return int(row[0]) if row and row[0] else 0
+
+
+def _record_free_usage(client_ip: str, count: int):
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS free_tier_usage (
+            client_ip TEXT PRIMARY KEY, wallets INTEGER NOT NULL DEFAULT 0
+        );
+    """)
+    conn.execute(
+        "INSERT INTO free_tier_usage (client_ip, wallets) VALUES (?, ?) "
+        "ON CONFLICT(client_ip) DO UPDATE SET wallets = wallets + ?",
+        (client_ip, count, count),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _verify_credits(api_key: str) -> bool:
+    """Server-verify a prepaid API key against the local KeyStore.
+
+    Client-supplied claims are never trusted: the key must exist (unhashed)
+    in the server-side key store for the credits payment method to apply.
+    """
+    if not api_key:
+        return False
+    try:
+        from core.auth import get_key_store
+
+        return get_key_store().verify(api_key) is not None
+    except Exception:
+        logger.exception("Credit verification failed")
+        return False
 
 
 async def verify_payment(chain: str, tx: str, expected: float) -> bool:
@@ -233,27 +282,47 @@ async def generate(req: GenerateRequest, request: Request):
 
     order_id = f"x402_{secrets.token_hex(8)}"
 
-    # Determine payment method
-    if total >= MIN_ORDER_USD and not req.payment_tx:
+    # ── Payment gate (server-enforced, per route) ──────────────────
+    # 1. Minimum order size is enforced unconditionally — no client can
+    #    bypass it by omitting payment info or claiming credits.
+    if total < MIN_ORDER_USD:
         raise HTTPException(
-            status_code=402,
+            status_code=400,
             detail={
-                "error": "Payment required",
-                "amount_usd": total,
-                "pay_to": PAYMENT_ADDRESS,
-                "chain": chain,
-                "token": "USDC",
-                "instructions": f"Send ${total} USDC on {chain.upper()} to {PAYMENT_ADDRESS}",
+                "error": "Order below minimum",
+                "required_min_usd": MIN_ORDER_USD,
+                "requested_usd": total,
+                "hint": f"Increase wallet count to at least {max(1, int(-(-MIN_ORDER_USD // PRICE_PER_WALLET)))} wallets.",
             },
         )
-    elif total >= MIN_ORDER_USD and req.payment_tx:
+
+    # 2. Determine payment method with server-side verification.
+    if req.api_key:
+        # Credits: the API key must be verified server-side. Invalid keys
+        # are rejected — we never trust a client-asserted credit balance.
+        if not _verify_credits(req.api_key):
+            raise HTTPException(status_code=402, detail="Invalid or unknown prepaid API key")
+        payment_method = "credits"
+    elif req.payment_tx:
         if not await verify_payment(chain, req.payment_tx, total):
             raise HTTPException(status_code=402, detail="Payment verification failed")
         payment_method = "onchain"
-    elif req.api_key:
-        # In production: verify API key has sufficient credits
-        payment_method = "credits"
     else:
+        # Free tier: enforced against server-tracked per-client usage.
+        free_used = _get_free_wallets_used(client_ip)
+        if free_used + count > FREE_WALLETS:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "Payment required",
+                    "reason": f"Free tier exhausted ({free_used}/{FREE_WALLETS} wallets used)",
+                    "amount_usd": total,
+                    "pay_to": PAYMENT_ADDRESS,
+                    "chain": chain,
+                    "token": "USDC",
+                    "instructions": f"Send ${total} USDC on {chain.upper()} to {PAYMENT_ADDRESS}",
+                },
+            )
         payment_method = "free"
 
     # Generate wallets
@@ -296,6 +365,9 @@ async def generate(req: GenerateRequest, request: Request):
     )
     conn.commit()
     conn.close()
+
+    if payment_method == "free":
+        _record_free_usage(client_ip, count)
 
     return {
         "order_id": order_id,

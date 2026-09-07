@@ -11,23 +11,23 @@ def test_health(client):
     assert data["service"] == "walletpress"
 
 
-def test_healthz(client):
-    resp = client.get("/api/v1/chain-vault/healthz")
+def test_healthz(client, admin_headers):
+    resp = client.get("/api/v1/chain-vault/healthz", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
     assert "timestamp" in data
 
 
-def test_root(client):
-    resp = client.get("/")
+def test_root(client, admin_headers):
+    resp = client.get("/", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["service"] == "WalletPress API"
 
 
-def test_list_chains(client):
-    resp = client.get("/api/v1/chain-vault/chains")
+def test_list_chains(client, admin_headers):
+    resp = client.get("/api/v1/chain-vault/chains", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
     chains = data

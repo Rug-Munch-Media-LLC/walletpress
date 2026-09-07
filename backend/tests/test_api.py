@@ -51,7 +51,7 @@ async def test_health(client):
 
 async def test_version(client):
     """GET /version returns service metadata."""
-    resp = await client.get("/version")
+    resp = await client.get("/version", headers=ADMIN_HEADERS)
     assert resp.status_code == 200
     data = resp.json()
     assert data["service"] == "WalletPress API"
@@ -60,7 +60,7 @@ async def test_version(client):
 
 async def test_root(client):
     """GET / returns service + trust metadata."""
-    resp = await client.get("/")
+    resp = await client.get("/", headers=ADMIN_HEADERS)
     assert resp.status_code == 200
     data = resp.json()
     assert data["service"] == "WalletPress API"
@@ -70,7 +70,7 @@ async def test_root(client):
 
 async def test_trust_build(client):
     """GET /trust/build returns reproducible-build info."""
-    resp = await client.get("/trust/build")
+    resp = await client.get("/trust/build", headers=ADMIN_HEADERS)
     assert resp.status_code == 200
     data = resp.json()
     assert data["service"] == "WalletPress"
@@ -87,7 +87,9 @@ async def test_balance_endpoint(client, httpx_mock):
         json={"jsonrpc": "2.0", "id": 1, "result": "0xde0b6b3a7640000"},
         status_code=200,
     )
-    resp = await client.get(f"/api/v1/wallet/{ETH_ADDRESS}/balance?chain=eth")
+    resp = await client.get(
+        f"/api/v1/wallet/{ETH_ADDRESS}/balance?chain=eth", headers=ADMIN_HEADERS
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["address"] == ETH_ADDRESS
@@ -98,14 +100,16 @@ async def test_balance_endpoint(client, httpx_mock):
 
 async def test_balance_unsupported_chain(client):
     """Unsupported chain returns 400 with a clear detail."""
-    resp = await client.get(f"/api/v1/wallet/{ETH_ADDRESS}/balance?chain=notachain")
+    resp = await client.get(
+        f"/api/v1/wallet/{ETH_ADDRESS}/balance?chain=notachain", headers=ADMIN_HEADERS
+    )
     assert resp.status_code == 400
     assert "chain" in resp.json()["detail"].lower()
 
 
 async def test_balance_invalid_address(client):
     """Invalid address format returns 400."""
-    resp = await client.get("/api/v1/wallet/notanaddress/balance?chain=eth")
+    resp = await client.get("/api/v1/wallet/notanaddress/balance?chain=eth", headers=ADMIN_HEADERS)
     assert resp.status_code == 400
 
 

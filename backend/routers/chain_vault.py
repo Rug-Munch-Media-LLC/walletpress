@@ -483,10 +483,36 @@ async def wallet_tree(request: Request):
 
 @router.post("/api-keys")
 async def create_api_key(request: Request):
-    """Create a new API key."""
+    """Create a new API key.
+
+    Audit fix (2026-09-06): requested scopes must be a subset of the
+    caller's own scopes (privilege-escalation prevention). Admin-role
+    callers may create keys with any scope.
+    """
+    caller = getattr(request.state, "api_key_obj", None)
+    if caller is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required to create API keys",
+        )
+
     body = await request.json()
     label = body.get("label", "default")
     scopes = body.get("scopes", ["wallet.read"])
+
+    if caller.role != "admin":
+        requested = set(scopes)
+        granted = set(caller.scopes or [])
+        if not requested.issubset(granted):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Scope escalation denied: requested scopes "
+                    f"{sorted(requested - granted)} exceed your own scopes "
+                    f"{sorted(granted)}"
+                ),
+            )
+
     ks = get_key_store()
     key_id, raw_key = ks.create(label=label, scopes=scopes)
     return {"api_key_id": key_id, "api_key": raw_key, "label": label, "scopes": scopes}

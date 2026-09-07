@@ -277,32 +277,28 @@ app.add_middleware(LicenseMiddleware)
 
 @app.middleware("http")
 async def require_auth_on_mutations(request: Request, call_next):
-    """Authenticate + role-check write requests.
+    """Authenticate + role-check ALL requests.
 
     P0-3 fix: previously this middleware only checked key validity, not role.
     A 'viewer' role key could mutate state. Now we:
       1. Verify the key (or accept admin key)
       2. Attach the APIKey to request.state.api_key_obj
-      3. Enforce minimum role 'viewer' on write endpoints (callers needing
+      3. Enforce minimum role 'operator' on write endpoints (callers needing
          stricter checks use the require_role() dependency)
 
-    For GET requests, we still verify the key and attach it to request.state,
-    but don't reject based on role (read-only is allowed for any role).
+    Audit fix (2026-09-06): authentication is now required on ALL endpoints
+    (GET included). Previously GET requests to vault/retention endpoints were
+    exempt, letting unauthenticated callers read wallet metadata and trigger
+    key-returning flows. Only the explicit public skip-list below is exempt.
+    Unauthenticated callers are rejected with 401 BEFORE any handler runs,
+    so no key material can leave the process without a valid credential.
     """
     path = request.url.path
     skip = ("/health", "/docs", "/openapi.json", "/metrics", "/hosting/register", "/hosting/login")
 
-    needs_auth = (
-        request.method in ("POST", "PUT", "PATCH", "DELETE")
-        or path.startswith("/api/v1/team/")  # GET/POST/DELETE all need auth+role
-    )
+    needs_auth = not path.startswith((*skip, "/mcp/", "/ws/"))
 
-    if (
-        needs_auth
-        and not path.startswith(skip)
-        and not path.startswith("/mcp/")
-        and not path.startswith("/ws/")
-    ):
+    if needs_auth:
         auth = request.headers.get("Authorization", "").replace("Bearer ", "")
         if not auth:
             auth = request.headers.get("X-API-Key", "")

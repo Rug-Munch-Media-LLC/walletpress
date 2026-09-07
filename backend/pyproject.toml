@@ -50,6 +50,9 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "respx>=0.23.0",
+    # Test-only: EVM message signing in tests (test_signature_verify, security-audit suite).
+    # Exact-pinned: eth-account 0.14+ pulls eth-utils 6.x which breaks substrate-interface (needs eth_utils<6).
+    "eth-account==0.13.7",
 ]
 
 [build-system]

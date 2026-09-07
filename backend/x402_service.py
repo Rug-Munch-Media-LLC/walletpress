@@ -10,16 +10,24 @@ you generate and return the keys, and you don't store them.
 
 x402 pattern:
   1. Client requests wallet generation with payment_tx
-  2. Server verifies the payment on-chain
+  2. Server verifies the payment via the x402-coffer facilitator
   3. Server generates wallets and returns keys
   4. Server provides a signed receipt attesting to key deletion
+
+Payment verification is delegated to a self-hosted x402-coffer instance
+(``X402_FACILITATOR_URL``) configured with the treasury receiving wallets —
+the in-house on-chain verification stubs were removed. Local policy stays
+ABOVE the facilitator: MIN_ORDER_USD, per-client free-tier tracking and
+KeyStore credit auth are enforced here, and the coffer's echoed
+network/asset/amount is confirm-matched against the quoted order before keys
+are returned (mirroring the pry-scraper billing confirm flow). Fail-closed:
+if the coffer is unreachable the order is refused with HTTP 402.
 
 To run this service separately:
   uvicorn x402_service:app --port 8011
 
 Requires:
-  - A blockchain RPC endpoint (for payment verification)
-  - A wallet for receiving payments
+  - A reachable x402-coffer facilitator (X402_FACILITATOR_URL)
   - Separate database from the main application instance
 """
 
@@ -36,6 +44,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+import coffer_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("x402")
@@ -223,32 +233,59 @@ def _verify_credits(api_key: str) -> bool:
         return False
 
 
-async def verify_payment(chain: str, tx: str, expected: float) -> bool:
-    """Verify an on-chain payment via the PayAI facilitator.
+async def verify_with_coffer(order_id: str, chain: str, tx: str, expected_usd: float) -> dict:
+    """Verify a reported on-chain payment via the x402-coffer facilitator.
 
-    Delegates to ``core.x402_verify.verify_usdc_payment()`` for multi-chain
-    USDC verification (Solana, Base, Polygon, Arbitrum, Ethereum).
-
-    Returns True if payment is verified, False otherwise.
+    Returns the coffer verification dict (``verified: True/False`` plus echo
+    fields). Fail-closed: raises ``coffer_client.CofferUnavailable`` when the
+    coffer is unreachable or ``X402_FACILITATOR_URL`` is unset, so the caller
+    refuses the order with HTTP 402 rather than trusting the client.
     """
-    if expected <= 0:
-        return True
+    if expected_usd <= 0:
+        return {"verified": True, "reason": "free", "network": "", "asset": ""}
     if not tx:
-        return False
-    try:
-        from core.x402_verify import verify_usdc_payment
+        return {"verified": False, "reason": "No payment tx provided"}
+    network, asset = coffer_client.resolve_network_asset(chain)
+    logger.info(
+        "coffer_verify_start order_id=%s chain=%s expected_usd=%s",
+        order_id,
+        chain,
+        expected_usd,
+    )
+    return await coffer_client.verify_payment(
+        payment_id=order_id,
+        tx_hash=tx,
+        network=network,
+        asset=asset,
+        amount_usd=expected_usd,
+    )
 
-        result = await verify_usdc_payment(chain, tx, expected)
-        if not result.get("verified", False):
-            logger.warning(f"Payment verification failed: {result.get('reason', 'unknown')}")
-            return False
-        return True
-    except ImportError:
-        logger.error("x402 verification module not available")
-        return False
-    except Exception as e:
-        logger.error(f"Payment verification error: {e}")
-        return False  # CONSERVATIVE: don't approve unverified payments
+
+async def settle_with_coffer(
+    order_id: str, chain: str, tx: str, expected_usd: float
+) -> dict | None:
+    """Best-effort settlement of a verified payment (EIP-3009 authorizations).
+
+    Called only AFTER :func:`verify_with_coffer` confirmed the payment. The
+    verify gate is authoritative (funds already reached the coffer-managed
+    treasury); settlement failures are logged, never a reason to withhold an
+    order whose payment is verified. Returns the settlement dict or None.
+    """
+    try:
+        network, asset = coffer_client.resolve_network_asset(chain)
+        return await coffer_client.settle_payment(
+            payment_id=order_id,
+            tx_hash=tx,
+            network=network,
+            asset=asset,
+            amount_usd=expected_usd,
+        )
+    except coffer_client.CofferUnavailable:
+        logger.warning(
+            "coffer_settle_unavailable order_id=%s — verify already passed; fulfilling",
+            order_id,
+        )
+        return None
 
 
 # ── Endpoints ────────────────────────────────────────────────────
@@ -281,6 +318,7 @@ async def generate(req: GenerateRequest, request: Request):
             }
 
     order_id = f"x402_{secrets.token_hex(8)}"
+    settlement: dict | None = None
 
     # ── Payment gate (server-enforced, per route) ──────────────────
     # 1. Minimum order size is enforced unconditionally — no client can
@@ -304,9 +342,40 @@ async def generate(req: GenerateRequest, request: Request):
             raise HTTPException(status_code=402, detail="Invalid or unknown prepaid API key")
         payment_method = "credits"
     elif req.payment_tx:
-        if not await verify_payment(chain, req.payment_tx, total):
-            raise HTTPException(status_code=402, detail="Payment verification failed")
+        # On-chain: gate on the coffer facilitator. MIN_ORDER_USD above is
+        # local policy enforced BEFORE the facilitator is consulted. Fail
+        # closed (402) if the coffer is unreachable — never fulfill on an
+        # unverifiable payment.
+        try:
+            verification = await verify_with_coffer(order_id, chain, req.payment_tx, total)
+        except coffer_client.CofferUnavailable as exc:
+            logger.error("Coffer verification unavailable for order %s: %s", order_id, exc)
+            raise HTTPException(
+                status_code=402,
+                detail="Payment verification unavailable — please retry shortly",
+            ) from exc
+        except ValueError as exc:  # unsupported payment chain
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not verification.get("verified"):
+            raise HTTPException(
+                status_code=402,
+                detail=f"Payment verification failed: {verification.get('reason') or 'not verified'}",
+            )
+        # Confirm-match mirror (parity with pry-scraper billing): the coffer's
+        # echoed network/asset/amount must match the quoted order before keys
+        # are returned.
+        network, asset = coffer_client.resolve_network_asset(chain)
+        ok, match_reason = coffer_client.confirm_matches_order(
+            verification, network=network, asset=asset, amount_usd=total
+        )
+        if not ok:
+            logger.warning("Coffer confirm-match failed for order %s: %s", order_id, match_reason)
+            raise HTTPException(
+                status_code=402,
+                detail=f"Payment verification failed: {match_reason}",
+            )
         payment_method = "onchain"
+        settlement = await settle_with_coffer(order_id, chain, req.payment_tx, total)
     else:
         # Free tier: enforced against server-tracked per-client usage.
         free_used = _get_free_wallets_used(client_ip)
@@ -383,6 +452,7 @@ async def generate(req: GenerateRequest, request: Request):
             "open_source": True,
             "note": "Keys returned once. We do not store them.",
         },
+        "settlement": settlement,
     }
 
 

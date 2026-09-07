@@ -112,6 +112,13 @@ class Config:
     rate_limit_per_minute: int = int(os.getenv("WP_RATE_LIMIT", "60"))
     max_wallets_per_request: int = int(os.getenv("WP_MAX_BATCH", "100"))
 
+    # x402-coffer payment facilitator (paid wallet printing). Payments reported
+    # by clients are verified against a self-hosted coffer instance configured
+    # with the treasury receiving wallets — never trusted client-side. Leaving
+    # X402_FACILITATOR_URL unset fails closed (paid orders are refused).
+    x402_facilitator_url: str = os.getenv("X402_FACILITATOR_URL", "")
+    x402_merchant_key: str = os.getenv("X402_MERCHANT_KEY", "")
+
     @staticmethod
     def rpc_url(chain: str, default: str) -> str:
         """Get RPC URL for a chain, checking WP_RPC_{CHAIN} env var override."""

@@ -219,6 +219,19 @@ async def import_wallet(req: ImportRequest, request: Request):
         detail={"chain": req.chain},
     )
 
+    # Fail closed: never accept plaintext key material when the vault
+    # password is unset — the key would be stored unencrypted (or silently
+    # discarded), which is unacceptable for a wallet provider.
+    if not cfg.vault_password:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Vault password not configured (WP_VAULT_PASSWORD). "
+                "Refusing to import a private key without at-rest encryption. "
+                "Set WP_VAULT_PASSWORD and restart the service."
+            ),
+        )
+
     generator = get_generator(cfg.vault_password)
     # In production, validate private key format before importing
     wallet = _safe_crypto_call(

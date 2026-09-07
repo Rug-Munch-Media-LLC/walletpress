@@ -156,12 +156,27 @@ async def airdrop_generate(req: AirdropRequest, request: Request):
 
     For 10,000 wallets, this takes approximately 30-60 seconds.
     """
+    from core.config import cfg
     from core.webhooks import get_webhook_deliverer
+
+    # Fail closed: refuse bulk generation when the vault password is unset —
+    # generated private keys would be silently discarded (stored unencrypted
+    # is not an option for airdrop wallets holding real funds).
+    if not cfg.vault_password:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Vault password not configured (WP_VAULT_PASSWORD). "
+                "Refusing to generate airdrop wallets without at-rest key encryption. "
+                "Set WP_VAULT_PASSWORD and restart the service."
+            ),
+        )
+
+    generator = get_generator(cfg.vault_password)
+    vault = get_vault()
 
     _audit("airdrop.generate", request, detail={"chain": req.chain, "count": req.total_wallets})
 
-    generator = get_generator()
-    vault = get_vault()
     manifest_id = f"airdrop_{secrets.token_hex(8)}"
     wallets = []
     chain_info = CHAINS.get(req.chain.lower())

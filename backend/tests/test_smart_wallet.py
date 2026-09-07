@@ -19,7 +19,7 @@ from core.config import cfg
 
 cfg._vault_password = os.environ["WP_VAULT_PASSWORD"]
 
-from core.smart_wallet import SmartWalletManager
+from core.smart_wallet import SmartWalletManager, build_recovery_message
 
 
 def _sw() -> SmartWalletManager:
@@ -27,11 +27,11 @@ def _sw() -> SmartWalletManager:
     return SmartWalletManager(tmp)
 
 
-def _sig(address: str) -> dict:
+def _sig(address: str, message: str = "test") -> dict:
     return {
         "address": address,
         "signature": "0x" + "ab" * 65,
-        "message": "test",
+        "message": message,
     }
 
 
@@ -71,9 +71,11 @@ def test_request_recovery_with_sufficient_guardians():
     sw = _sw()
     guardians = ["0xAAA", "0xBBB", "0xCCC"]
     sw.setup_recovery("wallet_r3", guardians, threshold=2)
-    sigs = [_sig("0xAAA"), _sig("0xBBB")]
+    canonical = build_recovery_message("wallet_r3", "0xNEW", "eth", 1_700_000_000)
+    sigs = [_sig("0xAAA", canonical), _sig("0xBBB", canonical)]
 
     with (
+        patch("core.smart_wallet.time.time", return_value=1_700_000_000.0),
         patch.object(sw, "_verify_signature", return_value=True),
         patch.object(sw, "_verify_claimant_signature", return_value=True),
         patch.object(
@@ -118,9 +120,11 @@ def test_recovery_with_invalid_claimant_signature():
     sw = _sw()
     guardians = ["0xAAA", "0xBBB"]
     sw.setup_recovery("wallet_r5", guardians, threshold=2)
-    sigs = [_sig("0xAAA"), _sig("0xBBB")]
+    canonical = build_recovery_message("wallet_r5", "0xNEW", "eth", 1_700_000_000)
+    sigs = [_sig("0xAAA", canonical), _sig("0xBBB", canonical)]
 
     with (
+        patch("core.smart_wallet.time.time", return_value=1_700_000_000.0),
         patch.object(sw, "_verify_signature") as mock_v,
         patch.object(sw, "_verify_claimant_signature", return_value=False),
     ):

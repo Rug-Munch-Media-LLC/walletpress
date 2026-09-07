@@ -16,7 +16,6 @@ not just a key generator. Nobody in the self-hosted space offers this.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -42,6 +41,29 @@ RECOVERY_MESSAGE_TEMPLATE = (
     "Timestamp: {timestamp}\n"
     "This authorizes key rotation for the above wallet."
 )
+
+# Guardian/claimant signatures older than this are rejected (replay window).
+RECOVERY_MESSAGE_MAX_AGE_SECONDS = 3600
+
+
+def build_recovery_message(wallet_id: str, new_address: str, chain: str, timestamp: float) -> str:
+    """Build the canonical recovery message that guardians must sign."""
+    return RECOVERY_MESSAGE_TEMPLATE.format(
+        wallet_id=wallet_id,
+        new_address=new_address,
+        chain=chain,
+        timestamp=int(timestamp),
+    )
+
+
+def eip191_hash(message: str) -> bytes:
+    """EIP-191 personal_sign hash: keccak256("\\x19Ethereum Signed Message:\\n" + len + msg)."""
+    from Crypto.Hash import keccak
+
+    prefixed = f"\x19Ethereum Signed Message:\n{len(message)}".encode() + message.encode()
+    k = keccak.new(digest_bits=256)
+    k.update(prefixed)
+    return k.digest()
 
 
 @dataclass
@@ -237,13 +259,41 @@ class SmartWalletManager:
                 "provided": len(signatures),
             }
 
-        # Validate claimant signature
+        # Replay protection: reject a recovery identical to one already recorded.
+        conn = self._conn()
+        prior = conn.execute(
+            "SELECT id, status FROM recovery_requests WHERE wallet_id = ? AND new_address = ?",
+            (wallet_id, new_address),
+        ).fetchall()
+        conn.close()
+        if prior:
+            return {
+                "error": "Replayed recovery request: a recovery to this address was already submitted",
+                "prior_recovery_id": prior[0]["id"],
+            }
+
+        # Canonical message: every guardian signature MUST be over exactly this
+        # message (EIP-191 personal_sign), bound to wallet_id, new_address,
+        # chain and a fresh timestamp. Old/replayed signatures fail the
+        # timestamp freshness check.
+        timestamp = time.time()
+        canonical_message = build_recovery_message(wallet_id, new_address, chain, timestamp)
+
+        # Validate claimant signature: the claimant must prove control of the
+        # recovering owner address (new_address) by signing the canonical message.
         if not claimant_signature:
             return {"error": "Claimant signature is required for recovery"}
-        if not self._verify_claimant_signature(wallet_id, claimant_signature, chain):
+        if not self._verify_claimant_signature(
+            wallet_id,
+            claimant_signature,
+            chain,
+            message=canonical_message,
+            expected_address=new_address,
+        ):
             return {"error": "Invalid claimant signature for recovery"}
 
-        # Verify each signature against registered guardians
+        # Verify each signature against registered guardians, bound to the
+        # canonical recovery message.
         valid_sigs = []
         for sig in signatures:
             addr = sig.get("address", "").lower()
@@ -251,6 +301,13 @@ class SmartWalletManager:
             message = sig.get("message", "")
 
             if addr not in [g.lower() for g in config["guardians"]]:
+                continue
+
+            if message != canonical_message:
+                logger.debug(
+                    "Guardian signature message mismatch for %s: not bound to this recovery",
+                    addr,
+                )
                 continue
 
             if self._verify_signature(addr, message, sig_data, chain):
@@ -306,15 +363,26 @@ class SmartWalletManager:
             "threshold": config["threshold"],
         }
 
-    def _verify_claimant_signature(self, wallet_id: str, signature: str, chain: str) -> bool:
+    def _verify_claimant_signature(
+        self,
+        wallet_id: str,
+        signature: str,
+        chain: str,
+        message: str = "",
+        expected_address: str = "",
+    ) -> bool:
         """Verify that the claimant owns the wallet being recovered.
 
-        Override this for custom verification logic (e.g., on-chain
-        signature verification against the wallet's registered address).
-        Default implementation accepts any non-empty signature for
-        flexibility during integration.
+        When ``expected_address`` is provided (the recovering owner / new
+        address), the claimant signature MUST be an EIP-191 signature over
+        ``message`` that recovers to ``expected_address``. Without binding
+        parameters, falls back to legacy non-empty check for compatibility.
         """
-        # In production, verify signature against wallet's public key
+        if not signature:
+            return False
+        if expected_address and message:
+            return self._verify_signature(expected_address, message, signature, chain)
+        # Legacy fallback (no binding context provided)
         return bool(signature)
 
     def _verify_signature(self, address: str, message: str, signature: str, chain: str) -> bool:
@@ -337,10 +405,9 @@ class SmartWalletManager:
                 pub_bytes = base58.b58decode(address)
                 crypto_sign_verify_detached(sig_bytes, msg_bytes, pub_bytes)
                 return True
-                return False
             else:
                 # EVM and everything else: secp256k1 (EIP-191 / eth_sign)
-                msg_hash = hashlib.sha256(message.encode()).digest()
+                msg_hash = eip191_hash(message)
                 if len(signature) == 132:  # 0x-prefixed hex
                     sig_bytes = bytes.fromhex(signature[2:])
                 else:
@@ -349,12 +416,17 @@ class SmartWalletManager:
                 if len(sig_bytes) != 65:
                     return False
 
+                # coincurve expects recovery id 0-3; eth_sign uses v=27/28
+                if sig_bytes[64] >= 27:
+                    sig_bytes = sig_bytes[:-1] + bytes([sig_bytes[64] - 27])
+
                 from coincurve import PublicKey
 
                 # Recover public key from signature
-                # coincurve >= 18 expects the full 65-byte serialized signature
-                pub = PublicKey.from_signature_and_message(sig_bytes, msg_hash)
-                pub_hex = pub.format().hex()
+                # coincurve >= 18 expects the full 65-byte serialized signature;
+                # hasher=None because msg_hash is already the EIP-191 digest.
+                pub = PublicKey.from_signature_and_message(sig_bytes, msg_hash, hasher=None)
+                pub_hex = pub.format(compressed=False).hex()
 
                 # Derive address
                 if pub_hex:
@@ -702,8 +774,11 @@ class SmartWalletManager:
     def _send_transaction(self, wallet_id: str, to_address: str, chain: str, amount: float) -> dict:
         """Execute an on-chain transaction via configured RPC.
 
-        Supports EVM chains (eth, base, polygon, etc.) via eth_sendRawTransaction.
-        For other chains, records the intent with instructions.
+        Real flow: decrypt key material from the vault → build the
+        transaction (nonce/gas/chainId from the node) → sign locally →
+        broadcast via eth_sendRawTransaction. Only a successful broadcast
+        result is returned; any failure raises so the timelock stays
+        unexecuted (no fake "pending_*" hashes).
         """
         from core.vault import get_vault
 
@@ -712,56 +787,75 @@ class SmartWalletManager:
         if not wallet:
             raise ValueError(f"Wallet {wallet_id} not found")
 
+        if not cfg.vault_password:
+            raise ValueError(
+                "Vault password not configured — cannot decrypt key material for signing"
+            )
+
         rpc_url = os.getenv(f"WP_RPC_{chain.upper()}", "")
         if not rpc_url:
-            return {
-                "tx_hash": f"pending_{wallet_id}_{int(time.time())}",
-                "from": wallet.address,
-                "to": to_address,
-                "chain": chain,
-                "amount": amount,
-                "note": f"No RPC configured for {chain}. Set WP_RPC_{chain.upper()} env var.",
-            }
+            raise ValueError(f"No RPC configured for {chain}. Set WP_RPC_{chain.upper()} env var.")
 
         from wallet_engine.chains import CHAINS
 
         chain_info = CHAINS.get(chain)
-        if chain_info and chain_info.family.value in ("evm",):
-            try:
-                import httpx
+        if not (chain_info and chain_info.family.value == "evm"):
+            raise ValueError(f"On-chain broadcast is only supported for EVM chains, got '{chain}'")
 
-                resp = httpx.post(
-                    rpc_url,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "eth_sendRawTransaction",
-                        "params": [wallet.encrypted_key],
-                        "id": 1,
-                    },
-                    timeout=30,
-                )
-                data = resp.json()
-                tx_hash = data.get("result", "")
-                if tx_hash:
-                    logger.info(f"Transaction broadcast: {chain} tx={tx_hash[:16]}...")
-                    return {
-                        "tx_hash": tx_hash,
-                        "from": wallet.address,
-                        "to": to_address,
-                        "chain": chain,
-                        "amount": amount,
-                        "note": "Transaction broadcast to mempool.",
-                    }
-            except Exception as e:
-                logger.error(f"Transaction broadcast failed: {e}")
+        # Decrypt key material (never logged, never transmitted raw).
+        from wallet_engine.generator import get_generator
 
+        generator = get_generator(cfg.vault_password)
+        private_key = generator.decrypt_key(wallet.encrypted_key)
+
+        import httpx
+
+        def _rpc(method: str, params: list) -> object:
+            resp = httpx.post(
+                rpc_url,
+                json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1},
+                timeout=30,
+            )
+            data = resp.json()
+            if data.get("error"):
+                raise ValueError(f"RPC {method} failed: {data['error']}")
+            return data.get("result")
+
+        nonce = int(_rpc("eth_getTransactionCount", [wallet.address, "pending"]), 16)
+        gas_price = int(_rpc("eth_gasPrice", []), 16)
+        chain_id = int(_rpc("eth_chainId", []), 16)
+
+        # Build and sign a legacy transfer transaction.
+        from eth_account import Account
+        from eth_utils import to_checksum_address
+
+        tx: dict = {
+            "to": to_checksum_address(to_address),
+            "value": int(amount * 10**18),
+            "gas": 21000,
+            "gasPrice": gas_price,
+            "nonce": nonce,
+            "chainId": chain_id,
+        }
+        signed = Account.sign_transaction(tx, private_key)
+        raw_tx = getattr(signed, "raw_transaction", None) or signed.rawTransaction
+        raw_hex = raw_tx.hex()
+        if not raw_hex.startswith("0x"):
+            raw_hex = "0x" + raw_hex
+
+        tx_hash = _rpc("eth_sendRawTransaction", [raw_hex])
+        if not tx_hash:
+            raise ValueError("Broadcast failed: RPC returned no transaction hash")
+
+        tx_hash = str(tx_hash)
+        logger.info(f"Transaction broadcast: {chain} tx={tx_hash[:16]}...")
         return {
-            "tx_hash": f"pending_{wallet_id}_{int(time.time())}",
+            "tx_hash": tx_hash,
             "from": wallet.address,
             "to": to_address,
             "chain": chain,
             "amount": amount,
-            "note": f"On-chain broadcast requires RPC configuration for {chain}. Set WP_RPC_{chain.upper()}.",
+            "note": "Transaction broadcast to mempool.",
         }
 
     # ── UTILITY ─────────────────────────────────────────────

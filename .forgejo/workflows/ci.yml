@@ -425,3 +425,53 @@ jobs:
             registry.rugmunch.io/walletpress:${{ github.sha }}
         env:
           COSIGN_EXPERIMENTAL: "1"
+
+  # ── Dependency freshness (libyear) ─────────────────────────────
+  # Advisory: flags dependency drift vs. the pinned backend manifest.
+  deps-freshness:
+    runs-on: docker-x64
+    continue-on-error: true
+    container:
+      image: nikolaik/python-nodejs:python3.11-nodejs22
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check dependency freshness
+        run: |
+          pip install pip-tools libyear 2>/dev/null || true
+          if [ -f backend/requirements.txt ]; then
+            libyear --file backend/requirements.txt || echo "Dep freshness check noted"
+          fi
+
+  # ── Mutation testing (mutmut) ──────────────────────────────────
+  # Informational only for now. Scoped to the core engine packages
+  # (core/ + wallet_engine/) so runtime stays bounded; runs against
+  # backend/tests via backend/pytest.ini.
+  mutation-test:
+    runs-on: docker-x64
+    needs: test
+    continue-on-error: true  # informational only for now
+    container:
+      image: nikolaik/python-nodejs:python3.11-nodejs22
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install uv + deps + mutmut
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends gcc git ca-certificates curl
+          rm -rf /var/lib/apt/lists/*
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          uv python install 3.11
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv/bin/python -e ".[dev]" mutmut
+      - name: Mutation testing (scoped to core engine)
+        run: source .venv/bin/activate && mutmut run --paths-to-mutate core/ wallet_engine/ --test-timeout 10 || echo "Mutation score noted (non-blocking)"
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: mutation-report
+          path: |
+            backend/.mutmut-cache/
+            backend/html/

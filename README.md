@@ -1,5 +1,7 @@
 # WalletPress
 
+**Status: Live** — multi-chain wallet management, x402 service, and chain vault.
+
 > Part of **Rug Munch Media LLC** — Wyoming-based crypto intelligence platform.
 
 ## What

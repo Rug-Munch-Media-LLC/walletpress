@@ -39,7 +39,7 @@ curl https://walletpress.rugmunch.io/backend/health
 curl https://walletpress.rugmunch.io/backend/docs
 
 # Direct IP (needs creds)
-curl -u crmuncher:<password> https://152.53.80.39/backend/health
+curl -u crmuncher:<password> https://[INTERNAL_IP]/backend/health
 ```
 
 Closes the 4 blockers documented in fleet-infra/ADMIN-ACCESS.md.

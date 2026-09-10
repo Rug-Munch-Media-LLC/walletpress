@@ -57,7 +57,7 @@ async def resolve_entity(address: str):
         "entity": None,
         "labels": [],
         "category": "unknown",
-        "note": "Enable RMI label database integration for ~154k curated wallet labels.",
+        "note": "Enable RMI label database integration for ~295k curated wallet labels.",
     }
 
 
@@ -72,7 +72,7 @@ async def wallet_labels(address: str):
         "address": address,
         "labels": [],
         "total": 0,
-        "note": "Enable RMI label sync for ~154k curated entries across 89 chains.",
+        "note": "Enable RMI label sync for ~295k curated entries across 89 chains.",
     }
 
 

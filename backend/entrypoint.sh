@@ -9,7 +9,7 @@ chmod 755 /data
 
 # Print info
 echo "[walletpress] data dir ready: /data"
-echo "[walletpress] starting: $@"
+echo "[walletpress] starting: $*"
 
 # Exec the CMD — runs as walletpress (Dockerfile USER directive)
 exec "$@"

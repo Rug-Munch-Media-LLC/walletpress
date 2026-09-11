@@ -15,11 +15,12 @@
 set -euo pipefail
 
 HASH_FILE="build.hash"
-EXCLUDE="-not -path './.git/*' -not -path './venv/*' -not -path '*/__pycache__/*' -not -name '*.pyc' -not -name '.env' -not -name 'htmlcov' -not -path './build.hash'"
+# Array (not a string): find args must not be word-split.
+EXCLUDE=(-not -path './.git/*' -not -path './venv/*' -not -path '*/__pycache__/*' -not -name '*.pyc' -not -name '.env' -not -name 'htmlcov' -not -path './build.hash')
 
 case "${1:-}" in
   --write)
-    find . -type f $EXCLUDE | sort | xargs sha256sum | sha256sum | cut -d' ' -f1 > "$HASH_FILE"
+    find . -type f "${EXCLUDE[@]}" | sort | xargs sha256sum | sha256sum | cut -d' ' -f1 > "$HASH_FILE"
     echo "Build hash written to $HASH_FILE: $(cat $HASH_FILE)"
     ;;
   --check)
@@ -28,7 +29,7 @@ case "${1:-}" in
       exit 1
     fi
     EXPECTED=$(cat "$HASH_FILE")
-    ACTUAL=$(find . -type f $EXCLUDE | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
+    ACTUAL=$(find . -type f "${EXCLUDE[@]}" | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
     if [ "$EXPECTED" = "$ACTUAL" ]; then
       echo "✓ Build hash MATCHES — code has not been modified"
       exit 0
@@ -40,6 +41,6 @@ case "${1:-}" in
     fi
     ;;
   *)
-    find . -type f $EXCLUDE | sort | xargs sha256sum | sha256sum | cut -d' ' -f1
+    find . -type f "${EXCLUDE[@]}" | sort | xargs sha256sum | sha256sum | cut -d' ' -f1
     ;;
 esac

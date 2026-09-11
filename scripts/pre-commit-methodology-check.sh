@@ -1,7 +1,7 @@
 #!/bin/bash
 # RugMunch Methodology Leak Detection — Pre-Commit Hook (SANITIZED for OSS)
 # Canonical source: standards/scripts/pre-commit-methodology-check.sh
-# 
+#
 # This is a sanitized version for public/open-source repos.
 # It checks for COMMON patterns that should never be committed.
 # The full version with infrastructure-specific patterns lives in
@@ -19,15 +19,15 @@ FORBIDDEN_PATTERNS=(
   'xox[baprs]-[0-9a-zA-Z]{10,}'  # Slack tokens
   'ghp_[a-zA-Z0-9]{36}'      # GitHub PATs
   'gho_[a-zA-Z0-9]{36}'      # GitHub OAuth tokens
-  
+
   # Generic internal hostname patterns (not our specific ones)
   '\.internal\.'
   '\.int\.'
   '\.corp\.'
-  
+
   # Generic filesystem paths that shouldn't be hardcoded
   '/home/[^/]+/\..*/(secrets|keys|certs|credentials)'
-  
+
   # Comments and documentation markers
   'FIXME'
   'HACK'
@@ -37,6 +37,9 @@ FORBIDDEN_PATTERNS=(
 
 FOUND=0
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+# Self-exclusion: this script contains the pattern names it scans for, so
+# scanning itself always produces false positives.
+STAGED_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -v 'scripts/pre-commit-methodology-check.sh' || true)
 
 if [ -z "$STAGED_FILES" ]; then
   echo "✅ Methodology check: clean (no staged files)"

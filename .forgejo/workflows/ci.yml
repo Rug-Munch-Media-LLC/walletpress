@@ -28,7 +28,10 @@ jobs:
   commitlint:
     runs-on: docker-x64
     container:
-      image: node:22-bookworm-slim
+      # Full node image: includes git. Slim images have no git, so
+      # checkout@v4 falls back to a REST download (no .git) and the
+      # git-log-based commit check fails with 'not a git repository'.
+      image: node:22-bookworm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -139,7 +142,9 @@ jobs:
       - name: Run pytest with coverage
         run: |
           source .venv/bin/activate
-          pytest tests/ -x -q --tb=short --cov=walletpress --cov-report=xml:coverage.xml --cov-report=term --cov-fail-under=60
+          # python -m pytest (not bare pytest): puts backend/ on sys.path
+          # so the top-level `core` package resolves.
+          python -m pytest tests/ -x -q --tb=short --cov=walletpress --cov-report=xml:coverage.xml --cov-report=term --cov-fail-under=60
       - name: Check coverage threshold
         run: |
           python -c "
@@ -185,7 +190,7 @@ jobs:
           pip install -r backend/requirements.txt 2>/dev/null || true
       - name: Run pip-audit (blocking on HIGH/CRITICAL)
         run: |
-          pip-audit --fail-on=high --desc 2>&1 || { echo "❌ pip-audit found HIGH/CRITICAL vulnerabilities — fix before merge"; exit 1; }
+          pip-audit --desc 2>&1 || { echo "❌ pip-audit found vulnerabilities — fix before merge"; exit 1; }
 
   security:
     runs-on: docker-x64
@@ -387,6 +392,9 @@ jobs:
   changelog:
     runs-on: docker-x64
     needs: [lint]
+    container:
+      # python+node: pip for git-cliff; git for fetch-depth: 0.
+      image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

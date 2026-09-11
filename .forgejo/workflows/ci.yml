@@ -14,13 +14,14 @@ jobs:
     runs-on: docker-x64
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
+      options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Install system deps + pre-commit
+      - name: Install system deps + pre-commit + hook tools
         run: |
           apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
           rm -rf /var/lib/apt/lists/*
-          pip install pre-commit
+          pip install pre-commit ruff mypy
       - name: Run ALL pre-commit hooks on all files
         run: pre-commit run --all-files --show-diff-on-failure
 
@@ -32,8 +33,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0  # Need full history to check all commits in PR
-      - name: Install commitlint
+      - name: Install commitlint + git
         run: |
+          apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
           npm install -g @commitlint/cli @commitlint/config-conventional
       - name: Validate all commits in PR
         run: |
@@ -60,7 +62,7 @@ jobs:
             --severity=ERROR \
             --exclude='tests/' \
             --exclude='.venv/' \
-            --sarif=semgrep.sarif \
+            --sarif --output=semgrep.sarif \
             .
       - uses: actions/upload-artifact@v3
         with:
@@ -71,6 +73,7 @@ jobs:
     runs-on: docker-x64
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
+      options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install system deps
@@ -220,20 +223,26 @@ jobs:
   trivy-scan:
     runs-on: docker-x64
     needs: build
+    container:
+      image: node:22-bookworm
+      # Docker socket (runner valid_volumes) so the image can be built; the
+      # job container needs the docker CLI too (node images don't ship it).
+      options: --volume /var/run/docker.sock:/var/run/docker.sock
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install docker CLI + trivy
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+          curl -sSfL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar xz -C /tmp
+          mv /tmp/docker/docker /usr/local/bin/docker
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
       - name: Build image for scanning
         run: docker build -t walletpress:${{ github.sha }} ./backend
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: 'walletpress:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-          vuln-type: 'os,library'
+        # trivy-action@0.28.0 does not exist (ref-not-found); binary + CLI.
+        run: trivy image --format sarif --output trivy-results.sarif --exit-code 1 --severity CRITICAL,HIGH 'walletpress:${{ github.sha }}'
       - uses: actions/upload-artifact@v3
+        if: always()
         with:
           name: trivy-results
           path: trivy-results.sarif
@@ -241,9 +250,14 @@ jobs:
   docker-lint:
     runs-on: docker-x64
     container:
-      image: hadolint/hadolint:latest
+      # node image: checkout@v4 is a node20 action (hadolint image had no node).
+      image: node:22-bookworm-slim
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install hadolint
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+          curl -sSfL https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
       - name: Hadolint root Dockerfile
         run: hadolint --failure-threshold error Dockerfile
       - name: Hadolint backend Dockerfile
@@ -252,9 +266,16 @@ jobs:
   shellcheck:
     runs-on: docker-x64
     container:
-      image: localhost/ci-alpine-node:3.19
+      # localhost/ci-alpine-node:3.19 does not exist on this runner; node
+      # image also satisfies checkout@v4's node20 requirement.
+      image: node:22-bookworm-slim
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install shellcheck
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates xz-utils && rm -rf /var/lib/apt/lists/*
+          curl -sSfL https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz | tar xJ -C /tmp
+          mv /tmp/shellcheck-v0.10.0/shellcheck /usr/local/bin/
       - name: ShellCheck all shell scripts
         run: |
           find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/.venv/*" -exec shellcheck -x {} +
@@ -263,6 +284,7 @@ jobs:
     runs-on: docker-x64
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
+      options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -307,9 +329,15 @@ jobs:
     continue-on-error: true
     runs-on: docker-x64
     container:
-      image: grafana/k6:latest
+      # node image: checkout@v4 is a node20 action (k6 image had no node).
+      image: node:22-bookworm-slim
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install k6
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+          curl -sSfL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xz -C /tmp
+          mv /tmp/k6-v0.54.0-linux-amd64/k6 /usr/local/bin/k6
       - name: Create results directory
         run: mkdir -p tests/k6/results
       - name: Run k6 smoke test

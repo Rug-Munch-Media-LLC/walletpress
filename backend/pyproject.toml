@@ -28,6 +28,7 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "apscheduler>=3.10.0",
     "python-jose[cryptography]>=3.3.0",  # tests import jose; was only in requirements.txt
+    "structlog>=24.1.0",  # tests import structlog; was only in requirements.txt
     "ecdsa>=0.19.2",  # transitive via bip-utils; 0.19.1 had PYSEC-2026-2467
 ]
 

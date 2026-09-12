@@ -382,7 +382,7 @@ jobs:
         run: npx htmlhint@latest "marketing/**/*.html" "*.html"
       - name: Serve site
         run: |
-          apt-get update && apt-get install -y --no-install-recommends python3 procps && rm -rf /var/lib/apt/lists/*
+          apt-get update && apt-get install -y --no-install-recommends python3 procps curl ca-certificates && rm -rf /var/lib/apt/lists/*
           python3 -m http.server 8080 --bind 127.0.0.1 &
           for i in $(seq 1 30); do
             curl -s http://localhost:8080/marketing/index.html > /dev/null 2>&1 && echo "Server ready" && break

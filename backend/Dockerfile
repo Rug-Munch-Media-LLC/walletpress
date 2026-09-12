@@ -5,9 +5,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc=4:14.2.0-1 \
-    libffi-dev=3.4.8-2 \
-    libssl-dev=3.5.6-1~deb13u2 && \
+    gcc \
+    libffi-dev \
+    libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -21,7 +21,7 @@ WORKDIR /app
 
 # Install runtime deps (no gcc needed)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl-dev=3.5.6-1~deb13u2 && \
+    libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy Python deps from builder

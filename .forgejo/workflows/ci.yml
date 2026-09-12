@@ -12,6 +12,7 @@ on:
 jobs:
   pre-commit-mirror:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
       options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
@@ -33,6 +34,7 @@ jobs:
 
   commitlint:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       # Full node image: includes git. Slim images have no git, so
       # checkout@v4 falls back to a REST download (no .git) and the
@@ -58,6 +60,7 @@ jobs:
 
   semgrep:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.12-nodejs22
     steps:
@@ -82,6 +85,7 @@ jobs:
 
   lint:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
       options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
@@ -110,6 +114,7 @@ jobs:
 
   typecheck:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
     defaults:
@@ -129,6 +134,7 @@ jobs:
 
   test:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
     defaults:
@@ -181,6 +187,7 @@ jobs:
 
   build:
     runs-on: docker-x64
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build backend image
@@ -189,6 +196,7 @@ jobs:
 
   pip-audit:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.12-nodejs22
     steps:
@@ -205,6 +213,7 @@ jobs:
 
   security:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
@@ -220,6 +229,7 @@ jobs:
 
   bandit:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
@@ -238,6 +248,7 @@ jobs:
 
   trivy-scan:
     runs-on: docker-x64
+    timeout-minutes: 30
     needs: build
     container:
       image: node:22-bookworm
@@ -267,6 +278,7 @@ jobs:
 
   docker-lint:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       # node image: checkout@v4 is a node20 action (hadolint image had no node).
       image: node:22-bookworm-slim
@@ -283,6 +295,7 @@ jobs:
 
   shellcheck:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       # localhost/ci-alpine-node:3.19 does not exist on this runner; node
       # image also satisfies checkout@v4's node20 requirement.
@@ -300,6 +313,7 @@ jobs:
 # Append these jobs under `jobs:` in any repo's ci.yml. Self-contained.
   supply-chain:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
       options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
@@ -320,6 +334,7 @@ jobs:
   nightly-deep-scan:
     if: ${{ github.event_name == 'schedule' }}
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
@@ -346,6 +361,7 @@ jobs:
     if: github.event_name == 'schedule'
     continue-on-error: true
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       # node image: checkout@v4 is a node20 action (k6 image had no node).
       image: node:22-bookworm-slim
@@ -376,6 +392,7 @@ jobs:
   # walletpress.cc serves static HTML (marketing/*.html + root legal pages).
   web-quality:
     runs-on: docker-x64
+    timeout-minutes: 30
     container:
       image: node:22-bookworm-slim
     timeout-minutes: 20
@@ -415,6 +432,7 @@ jobs:
   # is never clobbered.
   changelog:
     runs-on: docker-x64
+    timeout-minutes: 30
     needs: [lint]
     container:
       # python+node: pip for git-cliff; git for fetch-depth: 0.
@@ -431,6 +449,7 @@ jobs:
   # ── SBOM (CycloneDX) ─────────────────────────────────────────────
   sbom:
     runs-on: docker-x64
+    timeout-minutes: 30
     needs: [test]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -494,6 +513,7 @@ jobs:
 #   # Advisory: flags dependency drift vs. the pinned backend manifest.
   deps-freshness:
     runs-on: docker-x64
+    timeout-minutes: 30
     continue-on-error: true
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
@@ -512,6 +532,7 @@ jobs:
   # backend/tests via backend/pytest.ini.
   mutation-test:
     runs-on: docker-x64
+    timeout-minutes: 30
     needs: test
     continue-on-error: true  # informational only for now
     container:

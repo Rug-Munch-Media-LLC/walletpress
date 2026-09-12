@@ -30,6 +30,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",  # tests import jose; was only in requirements.txt
     "structlog>=24.1.0",  # tests import structlog; was only in requirements.txt
     "bech32>=1.2.0",  # tests import bech32 (address vectors); transitive-only before
+    "xrpl>=4.0.0",  # tests import xrpl (XRP address vectors); transitive-only before
     "ecdsa>=0.19.2",  # transitive via bip-utils; 0.19.1 had PYSEC-2026-2467
 ]
 

@@ -383,7 +383,7 @@ class WalletPressAdmin {
                     <?php submit_button('Derive All Addresses', 'primary'); ?>
                 </form>
             </div>
-            <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mnemonic'])): 
+            <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mnemonic'])):
                 $result = $this->api()->from_mnemonic(sanitize_text_field($_POST['mnemonic']), sanitize_text_field($_POST['passphrase']));
                 if ($result): ?>
                 <div class="walletpress-card">

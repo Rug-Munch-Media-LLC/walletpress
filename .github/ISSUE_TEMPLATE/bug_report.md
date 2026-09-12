@@ -9,9 +9,9 @@ labels: bug
 <!-- Clear description of the bug -->
 
 ## Steps to Reproduce
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Expected Behavior
 <!-- What should happen -->
@@ -20,7 +20,7 @@ labels: bug
 <!-- What actually happens -->
 
 ## Environment
-- OS: 
+- OS:
 - Python/Node version:
 - Project version:
 

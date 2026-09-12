@@ -215,7 +215,7 @@ footer .copy{color:var(--fg3);font-size:11px}
 
     <div class="payment-panel">
       <h3>Payment Method</h3>
-      
+
       <div class="pay-tabs">
         <button class="pay-tab active" onclick="switchTab('crypto')">Crypto</button>
         <button class="pay-tab" onclick="switchTab('card')">Card</button>
@@ -225,9 +225,9 @@ footer .copy{color:var(--fg3);font-size:11px}
       <!-- Crypto Payment -->
       <div id="crypto-panel" class="pay-content active">
         <p style="font-size:13px;color:var(--fg2);margin-bottom:16px">Select a chain and send exactly <strong style="color:var(--accent)" id="crypto-amount-display">$49.00 USD</strong> worth. We'll verify and deliver instantly.</p>
-        
+
         <div id="price-loading" style="text-align:center;padding:12px;color:var(--fg3);font-size:12px">Loading prices...</div>
-        
+
         <div class="chain-select" id="chain-select">
           <div class="chain-option selected" data-chain="evm" data-addr="0x1E3AC01d0fdb976179790BDD02823196A92705C9" data-symbol="ETH" onclick="selectChain(this)">
             <div class="icon">Ξ</div>
@@ -430,11 +430,11 @@ function updateAmountDisplay() {
   const cgId = selectedChain === 'evm' ? 'ethereum' : selectedChain;
   const priceData = currentPrices[cgId];
   if (!priceData) return;
-  
+
   const usdValue = PRODUCT === 'walletpress' ? 49.0 : 29.0;
   const cryptoAmount = (usdValue / priceData.usd).toFixed(6);
   const symbol = priceData.symbol;
-  
+
   document.getElementById('amount-display').textContent = `Send ${cryptoAmount} ${symbol} (~$${usdValue} USD)`;
   document.getElementById('crypto-amount-display').textContent = `${cryptoAmount} ${symbol}`;
 }

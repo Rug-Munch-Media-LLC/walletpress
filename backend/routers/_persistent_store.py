@@ -72,7 +72,7 @@ class PersistentStore:
     def all(cls, table: str) -> list[dict]:
         db = cls._get_db()
         rows = db.execute(
-            f"SELECT data FROM {cls._table(table)} ORDER BY created_at DESC"  # noqa: S608 — table validated against _TABLES allowlist
+            f"SELECT data FROM {cls._table(table)} ORDER BY created_at DESC"  # noqa: S608 — table validated against _TABLES allowlist  # nosemgrep: sqlalchemy-execute-raw-query
         ).fetchall()
         return [json.loads(r["data"]) for r in rows]
 
@@ -80,7 +80,7 @@ class PersistentStore:
     def get(cls, table: str, item_id: str) -> dict | None:
         db = cls._get_db()
         row = db.execute(
-            f"SELECT data FROM {cls._table(table)} WHERE id = ?",  # noqa: S608 — table validated against _TABLES allowlist
+            f"SELECT data FROM {cls._table(table)} WHERE id = ?",  # noqa: S608 — table validated against _TABLES allowlist  # nosemgrep: sqlalchemy-execute-raw-query
             (item_id,),
         ).fetchone()
         return json.loads(row["data"]) if row else None
@@ -89,7 +89,7 @@ class PersistentStore:
     def put(cls, table: str, item: dict) -> None:
         db = cls._get_db()
         db.execute(
-            f"INSERT OR REPLACE INTO {cls._table(table)} (id, data, created_at) VALUES (?, ?, ?)",  # noqa: S608 — table validated against _TABLES allowlist
+            f"INSERT OR REPLACE INTO {cls._table(table)} (id, data, created_at) VALUES (?, ?, ?)",  # noqa: S608 — table validated against _TABLES allowlist  # nosemgrep: sqlalchemy-execute-raw-query
             (item["id"], json.dumps(item), item.get("created_at", time.time())),
         )
         db.commit()
@@ -98,7 +98,7 @@ class PersistentStore:
     def delete(cls, table: str, item_id: str) -> None:
         db = cls._get_db()
         db.execute(
-            f"DELETE FROM {cls._table(table)} WHERE id = ?",  # noqa: S608 — table validated against _TABLES allowlist
+            f"DELETE FROM {cls._table(table)} WHERE id = ?",  # noqa: S608 — table validated against _TABLES allowlist  # nosemgrep: sqlalchemy-execute-raw-query
             (item_id,),
         )
         db.commit()

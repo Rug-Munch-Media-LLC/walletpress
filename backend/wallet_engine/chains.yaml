@@ -1,6 +1,6 @@
 # WalletPress Chain Definitions
 # Users can add custom chains here. Values merge on top of defaults in chains.py.
-# 
+#
 # Format:
 #   <key>:
 #     name: <display name>

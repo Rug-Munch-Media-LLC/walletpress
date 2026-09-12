@@ -248,9 +248,9 @@ jobs:
           apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
           curl -sSfL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar xz -C /tmp
           mv /tmp/docker/docker /usr/local/bin/docker
-          # Pinned tarball: the install.sh script queries the GitHub API for
-          # the latest tag (fails during network/DNS blips on the runner).
-          curl -sSfL https://github.com/aquasecurity/trivy/releases/download/v0.57.1/trivy_0.57.1_Linux-64bit.tar.gz | tar xz -C /usr/local/bin trivy
+          # Pinned version via install.sh: resolves the correct asset name
+          # and skips the "latest tag" API call.
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.57.1
       - name: Build image for scanning
         run: docker build -t walletpress:${{ github.sha }} ./backend
       - name: Run Trivy vulnerability scanner

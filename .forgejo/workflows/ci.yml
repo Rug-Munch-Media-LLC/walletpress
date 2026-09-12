@@ -155,7 +155,7 @@ jobs:
           source .venv/bin/activate
           # python -m pytest (not bare pytest): puts backend/ on sys.path
           # so the top-level `core` package resolves.
-          python -m pytest tests/ -x -q --tb=short --cov=walletpress --cov-report=xml:coverage.xml --cov-report=term --cov-fail-under=60
+          python -m pytest tests/ -x -q --tb=short --cov=core --cov=agent --cov=adapters --cov=routers --cov=cli --cov=plugins --cov-report=xml:coverage.xml --cov-report=term --cov-fail-under=60
       - name: Check coverage threshold
         run: |
           python -c "

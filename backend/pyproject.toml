@@ -33,6 +33,7 @@ dependencies = [
     "xrpl-py>=4.0.0",  # tests import xrpl (PyPI name is xrpl-py)
     "py-algorand-sdk>=2.6.0",  # tests import algosdk (Algorand vectors)
     "monero>=1.1.0",  # tests import monero.seed (Monero vectors)
+    "pytest-httpx>=0.30.0",  # httpx_mock fixture used across API tests
 ]
 
 [project.urls]

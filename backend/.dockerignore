@@ -1,0 +1,16 @@
+# Never ship local dev artifacts into the image.
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+*.egg-info/
+.env
+.env.*
+.git/

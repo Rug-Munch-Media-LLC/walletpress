@@ -253,7 +253,7 @@ jobs:
           mv /tmp/docker/docker /usr/local/bin/docker
           # Pinned version via install.sh: resolves the correct asset name
           # and skips the "latest tag" API call.
-          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.57.1
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.73.0
       - name: Build image for scanning
         run: docker build -t walletpress:${{ github.sha }} ./backend
       - name: Run Trivy vulnerability scanner

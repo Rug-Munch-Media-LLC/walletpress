@@ -562,15 +562,22 @@ jobs:
             backend/html/
 
   structure-gate:
-    # Anti-god-module + anti-monkeypatch ratchet (baseline:
-    # scripts/structure-baseline.json). Shrink freely; growth or NEW
-    # offenders fail the build. Regenerate deliberately: --update-baseline.
+    # Fleet coding gates (canonical: standards/fleet/gates, synced via
+    # scripts/fleet-sync-gates.sh). Firm <=200-line ratchet + monkeypatch +
+    # antipattern ratchets. Baselines: scripts/structure-baseline.json,
+    # scripts/monkeypatch-baseline.json, scripts/antipattern-baseline.json.
+    # Shrink freely; growth or NEW offenders fail the build. Regenerate
+    # deliberately: --update-baseline. All steps BLOCKING (no || true).
     runs-on: docker-x64
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Structure gate
-        run: python3 scripts/check-code-structure.py
+      - name: Structure gate (<=200 lines, shrink-only allowlist)
+        run: python3 scripts/check-structure.py --repo . --scan-root backend --scan-root cli --scan-root walletpress-mcp
+      - name: Monkeypatch ratchet (decrease-only)
+        run: python3 scripts/check-monkeypatch.py --repo .
       - name: Antipattern gate (per-repo ratchet)
         run: python3 scripts/check-antipatterns.py --repo .
+      - name: Gate self-test (prove gates catch violations)
+        run: bash scripts/ci-gate-selftest.sh

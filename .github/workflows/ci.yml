@@ -69,6 +69,24 @@ jobs:
       - run: bash /home/dev/scripts/license-audit.sh
         continue-on-error: true
 
+  gates:
+    # Fleet coding gates (canonical: standards/fleet/gates). Firm <=200-line
+    # ratchet + monkeypatch + antipattern ratchets; all steps BLOCKING.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Structure gate (<=200 lines, shrink-only allowlist)
+        run: python3 scripts/check-structure.py --repo . --scan-root backend --scan-root cli --scan-root walletpress-mcp
+      - name: Monkeypatch ratchet (decrease-only)
+        run: python3 scripts/check-monkeypatch.py --repo .
+      - name: Antipattern gate (per-repo ratchet)
+        run: python3 scripts/check-antipatterns.py --repo .
+      - name: Gate self-test (prove gates catch violations)
+        run: bash scripts/ci-gate-selftest.sh
+
   ai-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

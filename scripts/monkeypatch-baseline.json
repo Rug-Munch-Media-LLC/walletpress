@@ -1,0 +1,18 @@
+{
+	"total": 76,
+	"files": {
+		"backend/tests/test_audit39_critical_paths.py": 8,
+		"backend/tests/test_balance_fetcher.py": 2,
+		"backend/tests/test_coffer_client.py": 17,
+		"backend/tests/test_config_license_jwt.py": 8,
+		"backend/tests/test_health_monitor.py": 8,
+		"backend/tests/test_hosting_unit.py": 1,
+		"backend/tests/test_plugins.py": 2,
+		"backend/tests/test_security_audit_18_24_13.py": 2,
+		"backend/tests/test_security_audit_fixes.py": 11,
+		"backend/tests/test_smart_wallet.py": 11,
+		"backend/tests/test_tx_broadcaster.py": 1,
+		"backend/tests/test_x402_marketplace.py": 4,
+		"backend/tests/test_x402_verify.py": 1
+	}
+}

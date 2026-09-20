@@ -90,3 +90,4 @@ coverage/
 
 # Lighthouse CI local artifacts
 .lighthouseci/
+.methodology-patterns

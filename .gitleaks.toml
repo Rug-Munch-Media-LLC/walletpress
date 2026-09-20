@@ -88,6 +88,11 @@ commits = [
   "79e0b0afb46318f6564b703a3ba2e6bfcac351af",
 ]
 paths = [
+    # The companion pattern file for scripts/pre-commit-methodology-check.sh.
+    # A SCANNER DEFINITION (the detector, not the detected): it holds the
+    # internal literals the guard matches on, is gitignored, and is never
+    # committed or pushed. Same rationale as the guard script itself.
+    '''\.methodology-patterns''',
   # Pre-commit methodology check: detection patterns (scanner, not leak)
   '''scripts/pre-commit-methodology-check\.sh''',
   '''node_modules/''',

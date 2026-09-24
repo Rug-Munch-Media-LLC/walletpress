@@ -1,1 +1,31 @@
-../standards/lefthook.yml
+pre-commit:
+  parallel: true
+  commands:
+    methodology-leak:
+      run: bash scripts/pre-commit-methodology-check.sh
+    gitleaks:
+      run: gitleaks protect --staged --no-banner --verbose
+    envsitter:
+      run: envsitter validate --file .env
+    ruff:
+      run: ruff check {staged_files}
+
+pre-push:
+  parallel: true
+  commands:
+    mypy:
+      run: mypy .
+    bandit:
+      run: bandit -r .
+    deptry:
+      run: deptry .
+
+commit-msg:
+  commands:
+    methodology-leak-msg:
+      run: bash scripts/commit-msg-methodology-check.sh {1}
+      skip:
+        - merge
+        - rebase
+    commitlint:
+      run: commitlint --edit "$1"

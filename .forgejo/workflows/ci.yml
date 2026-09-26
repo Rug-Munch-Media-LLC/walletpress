@@ -15,7 +15,6 @@ jobs:
     timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
-      options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install system deps + pre-commit + hook tools
@@ -78,7 +77,7 @@ jobs:
             --exclude='.github/' \
             --sarif --output=semgrep.sarif \
             .
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v5
         with:
           name: semgrep-report
           path: semgrep.sarif
@@ -88,7 +87,6 @@ jobs:
     timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
-      options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install system deps
@@ -240,7 +238,7 @@ jobs:
         run: bandit -r backend/ cli/ -x tests/,__pycache__,.venv -ll -f json -o bandit-report.json || echo "Bandit issues found (non-blocking)"
         continue-on-error: true
       - name: Upload report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: bandit-report
           path: bandit-report.json
@@ -270,7 +268,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         # trivy-action@0.28.0 does not exist (ref-not-found); binary + CLI.
         run: trivy image --format sarif --output trivy-results.sarif --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed 'walletpress:${{ github.sha }}'  # block FIXABLE only; unfixed OS CVEs are upstream-bound
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: trivy-results
@@ -316,7 +314,6 @@ jobs:
     timeout-minutes: 30
     container:
       image: nikolaik/python-nodejs:python3.11-nodejs22
-      options: --volume /srv/work/repos/standards:/workspace/RugMunchMedia/standards:ro
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -382,7 +379,7 @@ jobs:
           else
             echo "⚠️ $TARGET unreachable — skipping k6 (no test environment in CI; non-blocking)"
           fi
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: k6-smoke-report
@@ -458,7 +455,7 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
           syft dir:. --output cyclonedx-json=sbom.cyclonedx.json
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v5
         with:
           name: sbom
           path: sbom.cyclonedx.json
@@ -553,13 +550,16 @@ jobs:
           uv pip install --python .venv/bin/python -e ".[dev]" mutmut
       - name: Mutation testing (scoped to core engine)
         run: source .venv/bin/activate && mutmut run --paths-to-mutate core/ wallet_engine/ --test-timeout 10 || echo "Mutation score noted (non-blocking)"
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: mutation-report
           path: |
             backend/.mutmut-cache/
             backend/html/
+          # v4+ excludes dotfiles by default — without this the
+          # .mutmut-cache leg uploads EMPTY and the mutation report is lost.
+          include-hidden-files: true
 
   structure-gate:
     # Fleet coding gates (canonical: standards/fleet/gates, synced via

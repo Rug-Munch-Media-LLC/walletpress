@@ -27,7 +27,32 @@ pre-push:
     bandit:
       run: bandit -r .
     deptry:
-      run: deptry .
+      # deptry 0.25.1 resolves its manifest through `--config`, whose default is
+      # the CWD-RELATIVE literal `pyproject.toml` (deptry/cli.py:129 default=
+      # "pyproject.toml"; deptry/config.py read_configuration_from_pyproject_toml
+      # returns that Path unchanged when the file is missing). It is NOT resolved
+      # relative to the positional `root`. So `deptry backend/` still looked for
+      # ./pyproject.toml, did not find it, and raised
+      # DependencySpecificationNotFoundError. The real fix is to pass the manifest
+      # explicitly via --config.
+      #
+      # The gate is NO LONGER SILENCED. It is enforcing and currently FAILS with
+      # 84 pre-existing DEP001 findings: backend/pyproject.toml declares a
+      # narrower set than backend/*.py actually imports (nacl, xrpl, algosdk,
+      # substrateinterface, bitcash, aptos_sdk, Crypto, argon2, starlette, yaml
+      # and others). Those are real, pre-existing manifest gaps that this gate
+      # was created to catch, not configuration noise.
+      #
+      # They are left failing rather than swallowed with `|| true`, because
+      # `|| true` on a dependency check is indistinguishable from having no
+      # dependency check. Fixing 84 manifest gaps is a separate change and must
+      # not be buried in a hook-repair commit.
+      #
+      # To clear the gate: add the missing entries to backend/pyproject.toml
+      # [project] dependencies (backend/requirements.txt already lists them).
+      # To accept them as intentional: re-add `--ignore DEP001` with a comment
+      # naming each accepted import, deliberately, in its own commit.
+      run: deptry --config backend/pyproject.toml backend/
 
 commit-msg:
   commands:

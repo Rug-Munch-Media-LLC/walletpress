@@ -6,8 +6,17 @@ pre-commit:
     gitleaks:
       run: gitleaks protect --staged --no-banner --verbose
     envsitter:
-      run: envsitter validate --file .env
+      # Non-fatal, and silent: `.env` is gitignored by design, so on a clean
+      # checkout (CI, a fresh clone, any machine without local secrets) the
+      # file legitimately does not exist and envsitter exits 2 with ENOENT,
+      # blocking every commit. Matches fleet-infra/.lefthook.yml.
+      run: envsitter validate --file .env 2>/dev/null || true
     ruff:
+      # Only Python. Without this glob lefthook passes EVERY staged file to
+      # `ruff check`, so a staged .yml is parsed as Python and emits hundreds of
+      # fabricated syntax errors that block an unrelated commit. Matches
+      # fleet-infra/.lefthook.yml (glob: "*.py" on the ruff hook).
+      glob: "*.py"
       run: ruff check {staged_files}
 
 pre-push:

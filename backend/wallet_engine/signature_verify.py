@@ -98,13 +98,18 @@ _B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 def _b58decode(data: str) -> bytes:
     """Minimal base58 decode (Bitcoin/Solana alphabet)."""
+    data = data.strip()
+    # Count leading '1's which represent leading zero bytes
+    pad = len(data) - len(data.lstrip("1"))
+    # Remove leading '1's for the numeric decode
+    data = data.lstrip("1")
+    if not data:
+        return b"\x00" * pad
     num = 0
-    for ch in data.strip():
+    for ch in data:
         idx = _B58_ALPHABET.find(ch)
         if idx < 0:
             raise ValueError(f"invalid base58 char {ch!r}")
         num = num * 58 + idx
-    raw = num.to_bytes((num.bit_length() + 7) // 8 or 1, "big")
-    # Leading '1's encode leading zero bytes.
-    pad = len(data) - len(data.lstrip("1"))
+    raw = num.to_bytes((num.bit_length() + 7) // 8, "big")
     return b"\x00" * pad + raw

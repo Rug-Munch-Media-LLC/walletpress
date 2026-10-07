@@ -33,7 +33,27 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - run: python3 -m pytest tests/ -v --tb=short --cov --cov-report=term-missing
+      # pytest-xdist (-n auto) + pytest-randomly (seeded via pyproject.toml)
+      - run: python3 -m pytest tests/ -v --tb=short --cov --cov-report=term-missing -n auto
+
+  # Mutation testing is nightly/manual first so we can establish a baseline
+  # before gating PRs. Trigger with `workflow_dispatch` or on a schedule.
+  mutation:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt mutmut
+      - run: mutmut run
+      - name: Mutation results
+        if: always()
+        run: mutmut results || true
 
   security:
     runs-on: ubuntu-latest
@@ -110,3 +130,22 @@ jobs:
                 {"role": "user", "content": "'"$(cat /tmp/pr.diff)"'"}
               ]
             }' > /tmp/ai_review.json
+
+  # Mutation testing is nightly/manual first so we can establish a baseline
+  # before gating PRs. Trigger with `workflow_dispatch` or on a schedule.
+  mutation:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt mutmut
+      - run: mutmut run
+      - name: Mutation results
+        if: always()
+        run: mutmut results || true

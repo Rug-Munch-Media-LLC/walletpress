@@ -56,6 +56,10 @@ dev = [
     "pytest>=9.1.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.6.0",
+    "pytest-randomly>=3.16.0",
+    "hypothesis>=6.113.0",
+    "mutmut>=2.4.7",
     "respx>=0.23.0",
     # Test-only: EVM message signing in tests (test_signature_verify, security-audit suite).
     # Exact-pinned: eth-account 0.14+ pulls eth-utils 6.x which breaks substrate-interface (needs eth_utils<6).
@@ -153,3 +157,38 @@ module = [
     "substrate-interface",
 ]
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+xfail_strict = false
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
+
+[tool.mutmut]
+source_paths = ["wallet_engine/signature_verify.py"]
+backup = false
+runner = "python -m pytest tests/test_signature_verify.py --tb=short -q -p no:randomly -p no:random-order"
+tests_dir = ["tests/"]
+dict_synonyms = true
+# Scope to signing module only (critical signing/key paths).
+# Run manually/nightly: make mutation
+
+[tool.hypothesis]
+# Hypothesis profiles for CI vs local
+# Use: python -m pytest tests/ -k "hypothesis" --hypothesis-profile=ci
+profiles = """
+[ci]
+deadline = 1000
+max_examples = 500
+suppress_health_check = [too_slow]
+verbosity = quiet
+
+[dev]
+deadline = 2000
+max_examples = 100
+verbosity = verbose
+"""

@@ -36,8 +36,9 @@ jobs:
       # pytest-xdist (-n auto) + pytest-randomly (seeded via pyproject.toml)
       - run: python3 -m pytest tests/ -v --tb=short --cov --cov-report=term-missing -n auto
 
-  # Mutation testing is nightly/manual first so we can establish a baseline
-  # before gating PRs. Trigger with `workflow_dispatch` or on a schedule.
+  # Mutation testing with cosmic-ray (replaces blocked mutmut).
+  # Runs nightly or on manual dispatch. Installs cosmic-ray, initializes a
+  # session DB, then executes mutations on wallet_engine/signature_verify.py.
   mutation:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
@@ -49,11 +50,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt mutmut
-      - run: mutmut run
+      - run: pip install -r requirements.txt
+      - run: pip install cosmic-ray
+      - run: cosmic-ray init cosmic-ray.toml cosmic-ray.sqlite
+      - run: cosmic-ray exec cosmic-ray.toml cosmic-ray.sqlite
       - name: Mutation results
         if: always()
-        run: mutmut results || true
+        run: cosmic-ray report cosmic-ray.sqlite || true
 
   security:
     runs-on: ubuntu-latest
@@ -131,21 +134,4 @@ jobs:
               ]
             }' > /tmp/ai_review.json
 
-  # Mutation testing is nightly/manual first so we can establish a baseline
-  # before gating PRs. Trigger with `workflow_dispatch` or on a schedule.
-  mutation:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install -r requirements.txt mutmut
-      - run: mutmut run
-      - name: Mutation results
-        if: always()
-        run: mutmut results || true
+  

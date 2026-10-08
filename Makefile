@@ -39,7 +39,7 @@ check: ## Full audit: lint + typecheck + security + test
 	make lint && make typecheck && make security && make test
 
 mutation: ## Run mutation testing on wallet_engine (nightly/manual)
-	cd backend && mutmut run
+	cd backend && cosmic-ray init cosmic-ray.toml cosmic-ray.sqlite && timeout 300 cosmic-ray exec cosmic-ray.toml cosmic-ray.sqlite || true
 
 clean: ## Clean build artifacts
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

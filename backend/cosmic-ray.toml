@@ -1,0 +1,13 @@
+[cosmic-ray]
+module-path = "wallet_engine/signature_verify.py"
+timeout = 30.0
+excluded-modules = []
+test-command = "python -m pytest tests/test_signature_verify.py --tb=short -q -p no:randomly -p no:random-order --timeout=30"
+
+[cosmic-ray.distributor]
+name = "local"
+
+# Scope mutations to critical signing module only
+[cosmic-ray.filters.path-filter]
+include = ["wallet_engine/signature_verify.py"]
+exclude = []

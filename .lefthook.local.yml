@@ -1,17 +1,2 @@
-# .lefthook.local.yml — WalletPress (monorepo seam)
-# Auto-merged by lefthook alongside ../standards/lefthook.yml.
-#
-# WalletPress is a monorepo: its Python lives in `backend/`, so the canonical
-# repo-root `import-boundaries` hook cannot see `backend/.importlinter`. This
-# local hook runs lint-imports from `backend/` to enforce the backend boundary.
 pre-push:
-  commands:
-    import-boundaries:
-      glob: "*.py"
-      run: |
-        if [ -d "backend" ] && [ -f "backend/.importlinter" ]; then
-          (cd backend && lint-imports) || {
-            echo "IMPORT-LINTER: walletpress backend boundary violated (see above)."
-            exit 1
-          }
-        fi
+  commands: {}

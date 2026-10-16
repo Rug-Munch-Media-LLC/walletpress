@@ -91,3 +91,12 @@ coverage/
 # Lighthouse CI local artifacts
 .lighthouseci/
 .methodology-patterns
+
+# Serena IDE cache: local project config + baselines, regenerated on open.
+# Same call as contextcrypto a8e9515 / degenfeed-web f8e76041.
+.serena/
+**/.serena/
+
+# Dated pre-guard backup of the methodology hook, superseded by the current
+# pre-commit-methodology-check.sh. Kept out of git; not source.
+*.pre-guard-generic-*

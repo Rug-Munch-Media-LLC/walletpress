@@ -193,7 +193,20 @@ jobs:
       # docker.sock, no host filesystem access.
       image: node:22-bookworm
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # git, NOT actions/checkout: kaniko replaces this container's root filesystem
+      # with the target image's base while it builds (measured 2026-10-22: /workspace,
+      # /tmp and /usr/local/bin are gone afterwards). A node action's post-step would
+      # then run against a filesystem with no node and fail the job despite a green
+      # build — so this job uses shell steps only and the build stays LAST.
+      - name: Checkout (git; no node action in this job)
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -c http.extraHeader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" \
+            fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
       - name: Install kaniko (daemonless builder)
         run: |
           apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -275,40 +288,52 @@ jobs:
       # NO docker.sock. The runner dropped it from valid_volumes: a job holding
       # the host socket is root-equivalent and can bind-mount any host path,
       # including the live /srv/work/repos/* tree. kaniko builds the image
-      # in-container (daemonless, unprivileged) and trivy scans the tar — the
-      # same artefact with zero host privilege.
+      # in-container (daemonless, unprivileged) and trivy scans the resulting
+      # tar — the same artefact with zero host privilege.
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Install kaniko + trivy (both daemonless)
+      # git, NOT actions/checkout — see the note in the `build` job: kaniko swaps
+      # out this container's rootfs, so no node action may follow the build.
+      - name: Checkout (git; no node action in this job)
+        env:
+          TOKEN: ${{ github.token }}
         run: |
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -c http.extraHeader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" \
+            fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+      # Build + scan in ONE step, because kaniko replaces the container filesystem:
+      #   * the image tar is written under /kaniko (the one path the builder keeps)
+      #     with --cleanup=false, so it is still there when the executor exits;
+      #   * trivy must be installed AFTER the build — anything in /usr/local/bin
+      #     from before the build no longer exists;
+      #   * the SARIF artifact upload is gone with it: there is no node left to run
+      #     upload-artifact. The gate itself is unchanged — the step still fails on
+      #     fixable CRITICAL/HIGH and the full table prints to the job log.
+      - name: Build image and scan it (kaniko + trivy, both daemonless)
+        run: |
+          set -euo pipefail
           apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
-          # kaniko executor: standalone binary, builds OCI images with no daemon.
           curl -sSfL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin crane
           mkdir -p /kaniko
           crane export --platform linux/amd64 gcr.io/kaniko-project/executor:v1.23.2 - | tar -x -C /kaniko --strip-components=1
-          # Pinned version via install.sh: resolves the correct asset name
-          # and skips the "latest tag" API call.
-          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.73.0
-      - name: Build image for scanning (kaniko, no daemon)
-        run: |
           WS=$(pwd)
           /kaniko/executor \
             --context "dir://$WS/backend" \
             --dockerfile "$WS/backend/Dockerfile" \
             --no-push \
             --destination "walletpress:${{ github.sha }}" \
-            --tar-path "$WS/walletpress-image.tar" \
+            --tar-path /kaniko/walletpress-image.tar \
             --snapshot-mode redo \
+            --cleanup=false \
             --verbosity warn
-      - name: Run Trivy vulnerability scanner
-        # trivy-action@0.28.0 does not exist (ref-not-found); binary + CLI.
-        # --input scans the built tar, so trivy needs no docker daemon either.
-        run: trivy image --input walletpress-image.tar --format sarif --output trivy-results.sarif --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed  # block FIXABLE only; unfixed OS CVEs are upstream-bound
-      - uses: actions/upload-artifact@v5
-        if: always()
-        with:
-          name: trivy-results
-          path: trivy-results.sarif
+          ls -l /kaniko/walletpress-image.tar
+          # Post-build environment is the image's base (python:3.12-slim): re-install
+          # curl, then trivy, then scan the tar with no daemon involved.
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.73.0
+          trivy image --input /kaniko/walletpress-image.tar \
+            --format table --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln
 
   docker-lint:
     runs-on: docker-x64

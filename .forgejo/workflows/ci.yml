@@ -186,11 +186,33 @@ jobs:
   build:
     runs-on: docker-x64
     timeout-minutes: 30
+    container:
+      # Was a host-mode job (`container:` omitted) => its `docker build` ran as
+      # the runner process user on the host, i.e. host root. kaniko builds the
+      # image inside this container instead: daemonless, no CAP_SYS_ADMIN, no
+      # docker.sock, no host filesystem access.
+      image: node:22-bookworm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Build backend image
+      - name: Install kaniko (daemonless builder)
         run: |
-          docker build -t walletpress-backend backend/ || echo "Docker build requires Docker daemon"
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+          curl -sSfL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin crane
+          mkdir -p /kaniko
+          crane export --platform linux/amd64 gcr.io/kaniko-project/executor:v1.23.2 - | tar -x -C /kaniko --strip-components=1
+      - name: Build backend image
+        # Blocking on purpose: the old `|| echo` swallow made this job green
+        # even when no image was produced, which is why nobody noticed it was
+        # host-mode.
+        run: |
+          WS=$(pwd)
+          /kaniko/executor \
+            --context "dir://$WS/backend" \
+            --dockerfile "$WS/backend/Dockerfile" \
+            --no-push \
+            --destination "walletpress-backend:${{ github.sha }}" \
+            --snapshot-mode redo \
+            --verbosity warn
 
   pip-audit:
     runs-on: docker-x64
@@ -250,24 +272,38 @@ jobs:
     needs: build
     container:
       image: node:22-bookworm
-      # Docker socket (runner valid_volumes) so the image can be built; the
-      # job container needs the docker CLI too (node images don't ship it).
-      options: --volume /var/run/docker.sock:/var/run/docker.sock
+      # NO docker.sock. The runner dropped it from valid_volumes: a job holding
+      # the host socket is root-equivalent and can bind-mount any host path,
+      # including the live /srv/work/repos/* tree. kaniko builds the image
+      # in-container (daemonless, unprivileged) and trivy scans the tar — the
+      # same artefact with zero host privilege.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Install docker CLI + trivy
+      - name: Install kaniko + trivy (both daemonless)
         run: |
           apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
-          curl -sSfL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar xz -C /tmp
-          mv /tmp/docker/docker /usr/local/bin/docker
+          # kaniko executor: standalone binary, builds OCI images with no daemon.
+          curl -sSfL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin crane
+          mkdir -p /kaniko
+          crane export --platform linux/amd64 gcr.io/kaniko-project/executor:v1.23.2 - | tar -x -C /kaniko --strip-components=1
           # Pinned version via install.sh: resolves the correct asset name
           # and skips the "latest tag" API call.
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.73.0
-      - name: Build image for scanning
-        run: docker build -t walletpress:${{ github.sha }} ./backend
+      - name: Build image for scanning (kaniko, no daemon)
+        run: |
+          WS=$(pwd)
+          /kaniko/executor \
+            --context "dir://$WS/backend" \
+            --dockerfile "$WS/backend/Dockerfile" \
+            --no-push \
+            --destination "walletpress:${{ github.sha }}" \
+            --tar-path "$WS/walletpress-image.tar" \
+            --snapshot-mode redo \
+            --verbosity warn
       - name: Run Trivy vulnerability scanner
         # trivy-action@0.28.0 does not exist (ref-not-found); binary + CLI.
-        run: trivy image --format sarif --output trivy-results.sarif --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed 'walletpress:${{ github.sha }}'  # block FIXABLE only; unfixed OS CVEs are upstream-bound
+        # --input scans the built tar, so trivy needs no docker daemon either.
+        run: trivy image --input walletpress-image.tar --format sarif --output trivy-results.sarif --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed  # block FIXABLE only; unfixed OS CVEs are upstream-bound
       - uses: actions/upload-artifact@v5
         if: always()
         with:
@@ -448,6 +484,11 @@ jobs:
     runs-on: docker-x64
     timeout-minutes: 30
     needs: [test]
+    container:
+      # Was host-mode (no `container:`) => ran as root on the runner host.
+      # syft only reads the tree, so a plain node image is enough; checkout@v4
+      # and upload-artifact need node20, which node:22 provides.
+      image: node:22-bookworm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Generate SBOM (CycloneDX)

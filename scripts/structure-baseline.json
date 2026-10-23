@@ -57,6 +57,6 @@
 		"backend/wallet_engine/generator.py": 1000,
 		"backend/walletpress_cli.py": 502,
 		"backend/x402_service.py": 477,
-		"walletpress-mcp/walletpress_mcp.py": 226
+		"walletpress-mcp/walletpress_mcp.py": 224
 	}
 }

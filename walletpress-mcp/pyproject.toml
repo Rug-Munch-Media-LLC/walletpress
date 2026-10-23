@@ -4,7 +4,8 @@ version = "1.0.0"
 description = "Standalone MCP Server for WalletPress — connect any MCP client to your wallet engine"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.0.0",
+    # mcp 2.x renamed FastMCP -> MCPServer; this server targets the v1 API
+    "mcp>=1.0.0,<2",
     "httpx>=0.27.0",
 ]
 

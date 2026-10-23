@@ -69,17 +69,20 @@ def _call_backend(method: str, path: str, data: dict | None = None) -> dict:
         # Local — import and call directly
         import importlib.util
 
-        if not (
-            importlib.util.find_spec("core.vault")
-            and importlib.util.find_spec("wallet_engine.chains")
-            and importlib.util.find_spec("wallet_engine.generator")
-            and importlib.util.find_spec("core.config")
-        ):
-            return {"error": "Cannot import wallet engine. Set WALLETPRESS_BACKEND or use WP_API_URL."}
+        required = (
+            "core.vault",
+            "wallet_engine.chains",
+            "wallet_engine.generator",
+            "core.config",
+        )
+        if not all(importlib.util.find_spec(module) for module in required):
+            return {
+                "error": "Cannot import wallet engine. Set WALLETPRESS_BACKEND or use WP_API_URL."
+            }
         return _local_call(method, path, data)
 
 
-def _local_call(method: str, path: str, data: dict | None = None) -> dict:
+def _local_call(method: str, path: str, _data: dict | None = None) -> dict:
     """Handle a local call by routing to the appropriate module."""
     from core.vault import get_vault
     from wallet_engine.chains import CHAINS
@@ -91,11 +94,18 @@ def _local_call(method: str, path: str, data: dict | None = None) -> dict:
     if "/api/v1/chain-vault/chains" in path:
         return {
             "total_chains": len(CHAINS),
-            "chains": {k: {"name": v.name, "symbol": v.symbol} for k, v in CHAINS.items()},
+            "chains": {
+                k: {"name": v.name, "symbol": v.symbol} for k, v in CHAINS.items()
+            },
         }
     if "/api/v1/chain-vault/vault" in path and method == "GET":
         wallets = vault.list(limit=100)
-        return {"wallets": [{"id": w.id, "chain": w.chain, "address": w.address, "label": w.label} for w in wallets]}
+        return {
+            "wallets": [
+                {"id": w.id, "chain": w.chain, "address": w.address, "label": w.label}
+                for w in wallets
+            ]
+        }
     if "/api/v1/chain-vault/stats" in path:
         return vault.stats()
     if "/api/v1/chain-vault/healthz" in path:
@@ -109,7 +119,9 @@ def _local_call(method: str, path: str, data: dict | None = None) -> dict:
 @mcp.tool()
 def vault_list(chain: str = "", limit: int = 50) -> list[dict]:
     """List wallets in the vault."""
-    result = _call_backend("GET", f"/api/v1/chain-vault/vault?chain={chain}&limit={limit}")
+    result = _call_backend(
+        "GET", f"/api/v1/chain-vault/vault?chain={chain}&limit={limit}"
+    )
     return result.get("wallets", result) if isinstance(result, dict) else result
 
 
@@ -128,7 +140,11 @@ def chains_list() -> dict:
 @mcp.tool()
 def wallet_generate(chain: str, label: str = "", count: int = 1) -> dict:
     """Generate wallets."""
-    return _call_backend("POST", "/api/v1/chain-vault/generate", {"chain": chain, "label": label, "count": count})
+    return _call_backend(
+        "POST",
+        "/api/v1/chain-vault/generate",
+        {"chain": chain, "label": label, "count": count},
+    )
 
 
 @mcp.tool()
@@ -146,7 +162,8 @@ def balance_check(chain: str, address: str) -> dict:
 @mcp.tool()
 def validate_address(chain: str, address: str) -> dict:
     """Validate an address format."""
-    from wallet_engine.chains import CHAINS, validate_address as va
+    from wallet_engine.chains import CHAINS
+    from wallet_engine.chains import validate_address as va
 
     chain_info = CHAINS.get(chain.lower())
     if not chain_info:
@@ -176,12 +193,14 @@ def plugins_list() -> list[dict]:
 def plugin_execute(plugin: str, tool: str, params: str) -> dict:
     """Execute a plugin tool. Params should be JSON string."""
     try:
-        from plugins.sdk import execute_plugin_tool
         import asyncio
+
+        from plugins.sdk import execute_plugin_tool
 
         p = json.loads(params) if isinstance(params, str) else params
         return asyncio.run(execute_plugin_tool(plugin, tool, p))
-    except ImportError:
+    except ImportError as exc:
+        logger.warning("Plugin system unavailable: %s", exc)
         return {"error": "Plugin system not available"}
 
 
@@ -195,8 +214,12 @@ def main():
     parser = argparse.ArgumentParser(description="WalletPress MCP Server")
     parser.add_argument("--api-url", help="WalletPress API URL (remote mode)")
     parser.add_argument("--api-key", help="WalletPress API key")
-    parser.add_argument("--backend-path", help="Path to walletpress backend (local mode)")
-    parser.add_argument("--transport", default="stdio", choices=["stdio", "sse"], help="MCP transport")
+    parser.add_argument(
+        "--backend-path", help="Path to walletpress backend (local mode)"
+    )
+    parser.add_argument(
+        "--transport", default="stdio", choices=["stdio", "sse"], help="MCP transport"
+    )
     parser.add_argument("--port", type=int, default=8080, help="Port for SSE transport")
     args = parser.parse_args()
 

@@ -1,8 +1,9 @@
 # WalletPress
 
-**Status: Live** — multi-chain wallet management, x402 service, and chain vault.
+> Multi-chain wallet engine, x402 service and chain vault: 55 chains, BIP39 derivation, AES-256 vault and a WordPress plugin.
 
-> Part of **Rug Munch Media LLC** — Wyoming-based crypto intelligence platform.
+**License:** [BSL 1.1](LICENSE) · **Canonical:** https://git.rugmunch.io/RugMunchMedia/walletpress
+**Mirrors:** [GitHub](https://github.com/Rug-Munch-Media-LLC) · [GitLab](https://gitlab.com/rug-munch-media-group) · [Codeberg](https://codeberg.org/RugMunchMedia)
 
 ## What
 

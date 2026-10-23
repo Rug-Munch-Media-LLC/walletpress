@@ -1,6 +1,10 @@
 # OSV triage baseline — walletpress backend
-# Reviewed 2026-08-22.
+# Reviewed 2026-10-24 (dependency refresh).
 
 [[IgnoredVulns]]
 id = "PYSEC-2026-1325"
-reason = "ecdsa 0.19.x — no upstream fix available; Minerva timing side-channel, low exploitability for offline signature verification use"
+reason = "ecdsa 0.19.2 (latest, no upstream fix) — Minerva timing side-channel, low exploitability for offline signature verification use"
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-4298"
+reason = "python-jose 3.5.0 (latest, no upstream fix) — we only decode HS256 service tokens with it, never attacker-supplied JWEs"

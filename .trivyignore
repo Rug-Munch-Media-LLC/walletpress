@@ -1,8 +1,14 @@
 # Trivy image-scan ignores — each entry MUST carry a justification and a
 # re-check note. Do not grow this file without one.
 
-# ecdsa 0.19.1 — Minerva timing / DER parsing (PYSEC-2026-1325 / PYSEC-2026-2467)
-# Pinned by aptos-sdk==0.11.0 (latest release as of 2026-09-12; pins ecdsa==0.19.1).
-# Re-check when aptos-sdk publishes a release that relaxes the pin.
-PYSEC-2026-2467
+# ecdsa 0.19.2 — Minerva timing / DER parsing (PYSEC-2026-1325).
+# Pulled by aptos-sdk 0.12.3; 0.19.2 is the latest ecdsa release and no fixed
+# version exists upstream. Offline address/signature-verification use only.
+# Re-check when ecdsa publishes a release. (2026-10-24: the older
+# PYSEC-2026-2467 was resolved by the 0.19.1 -> 0.19.2 bump and is dropped.)
 PYSEC-2026-1325
+
+# python-jose 3.5.0 — PYSEC-2026-4298. 3.5.0 is the latest release and no
+# upstream fix exists. Used only for decoding our own HS256 service tokens.
+# Re-check on any python-jose release.
+PYSEC-2026-4298

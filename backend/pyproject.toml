@@ -10,29 +10,29 @@ authors = [
 ]
 
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0",
+    "fastapi>=0.161.1",
+    "uvicorn[standard]>=0.54.0",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.1",
     # Crypto deps pinned to EXACT versions (supply-chain hardening, 2026-09-02)
     "coincurve==21.0.0",
     "base58==2.1.1",
     "pynacl>=1.6.2",  # 1.5.0 had PYSEC-2026-1448/3002 (libsodium)
-    "cryptography==50.0.0",
+    "cryptography==50.0.2",
     "argon2-cffi==25.1.0",
-    "pycryptodomex==3.23.0",
-    "bip-utils==2.12.1",
-    "pycardano>=0.19.0",
+    "pycryptodomex==3.24.1",
+    "bip-utils==2.12.2",
+    "pycardano>=0.19.2",
     "cbor2>=5.6.5,<6.0.0",  # pycardano imports FrozenDict (removed in cbor2 6.0)
-    "httpx>=0.27.0",
-    "aiosqlite>=0.20.0",
-    "apscheduler>=3.10.0",
-    "python-jose[cryptography]>=3.3.0",  # tests import jose; was only in requirements.txt
-    "structlog>=24.1.0",  # tests import structlog; was only in requirements.txt
+    "httpx>=0.28.1",
+    "aiosqlite>=0.22.1",
+    "apscheduler>=3.11.3,<4",
+    "python-jose[cryptography]>=3.5.0",  # tests import jose; was only in requirements.txt
+    "structlog>=26.1.0",  # tests import structlog; was only in requirements.txt
     "bech32>=1.2.0",  # tests import bech32 (address vectors); transitive-only before
-    "xrpl-py>=4.0.0",  # tests import xrpl (PyPI name is xrpl-py)
-    "py-algorand-sdk>=2.6.0",  # tests import algosdk (Algorand vectors)
-    "monero>=1.1.0",  # tests import monero.seed (Monero vectors)
+    "xrpl-py>=5.2.0",  # tests import xrpl (PyPI name is xrpl-py)
+    "py-algorand-sdk>=2.12.0",  # tests import algosdk (Algorand vectors)
+    "monero>=1.1.1",  # tests import monero.seed (Monero vectors)
     "pytest-httpx>=0.30.0",  # httpx_mock fixture used across API tests
 ]
 
@@ -47,18 +47,18 @@ wp-verify-receipt = "cli.verify_receipt:main"
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.16.0",
-    "mypy>=2.3.0",
+    "ruff>=0.17.2",
+    "mypy>=2.4.0",
     "bandit>=1.9.0",
-    "semgrep>=1.176.0",
+    "semgrep>=1.182.1",
     "import-linter>=2.15",
     "vulture>=2.16",
     "pytest>=9.1.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "pytest-xdist>=3.6.0",
-    "pytest-randomly>=3.16.0",
-    "hypothesis>=6.113.0",
+    "pytest-xdist>=3.8.0",
+    "pytest-randomly>=5.0.0",
+    "hypothesis>=6.170.8",
     "respx>=0.23.0",
     # Test-only: EVM message signing in tests (test_signature_verify, security-audit suite).
     # Exact-pinned: eth-account 0.14+ pulls eth-utils 6.x which breaks substrate-interface (needs eth_utils<6).

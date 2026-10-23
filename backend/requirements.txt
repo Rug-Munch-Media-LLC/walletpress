@@ -1,41 +1,43 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
+fastapi>=0.161.1
+uvicorn[standard]>=0.54.0
+pydantic>=2.14.1
+pydantic-settings>=2.16.1
+# Crypto deps pinned to EXACT versions (supply-chain hardening, 2026-09-02)
 coincurve==21.0.0
 # Floor pins overriding vulnerable transitives (osv 2026-08-22):
-orjson>=3.11.5
-pycryptodomex==3.23.0
+orjson>=3.13.0
+pycryptodomex==3.24.1
 base58==2.1.1
 pynacl>=1.6.2  # 1.5.0 had PYSEC-2026-1448/3002
-cryptography==50.0.0
-httpx>=0.27.0
-aiosqlite>=0.20.0
-bip-utils==2.12.1
-qrcode>=7.4.0
+cryptography==50.0.2
+httpx>=0.28.1
+aiosqlite>=0.22.1
+bip-utils==2.12.2
+qrcode>=8.2
 argon2-cffi==25.1.0
-pyyaml>=6.0
-apscheduler>=3.10.0
-alembic>=1.13.0
-sqlalchemy>=2.0.0
+pyyaml>=6.0.3
+apscheduler>=3.11.3,<4  # 4.x is a rewrite (trigger API break)
+alembic>=1.20.1
+sqlalchemy>=2.1.6
 # Per-chain address encoders (WP-040..WP-058 fixes)
 bech32>=1.2.0
-stellar-sdk>=10.0.0
-xrpl-py>=5.0.0
-py-algorand-sdk>=2.0.0
-tonsdk>=1.0.0
-bitcash>=1.2.0
-monero>=0.0.4
-substrate-interface>=1.8.0
-pycardano>=0.19.0   # Cardano Kholaw (BIP32-Ed25519 IOHK) — 1.1 MB disk
+stellar-sdk>=16.1.1,<17  # 16.1.1 is the tested line; 17 is an XDR major
+xrpl-py>=5.2.0
+py-algorand-sdk>=2.12.0
+tonsdk>=1.0.15
+bitcash>=1.2.1
+monero>=1.1.1
+substrate-interface>=1.8.1
+pycardano>=0.19.2   # Cardano Kholaw (BIP32-Ed25519 IOHK) — 1.1 MB disk
 cbor2>=5.6.5,<6.0.0 # pycardano imports FrozenDict (removed in cbor2 6.0)
-aptos-sdk>=0.11.0    # Aptos official SDK — golden-vector reference for apt addresses
+aptos-sdk>=0.12.3,<0.13  # 0.x: minor == breaking; 0.12.3 drops the ecdsa 0.19.1 pin
 
-python-multipart>=0.0.31
-mcp>=1.25.0,<2  # v2 renamed FastMCP->MCPServer; agent/mcp uses the v1 API
-python-jose[cryptography]>=3.3.0
-# ecdsa 0.19.1 (PYSEC-2026-2467) is pinned by aptos-sdk==0.11.0
-# (latest; no newer release). Documented ignore in pip-audit + .trivyignore.
+python-multipart>=0.0.32
+mcp>=1.30.0,<2  # v2 renamed FastMCP->MCPServer; agent/mcp uses the v1 API
+python-jose[cryptography]>=3.5.0
+# Residual audit findings with NO upstream fix (documented in pip-audit/trivy ignore):
+#   ecdsa 0.19.2  PYSEC-2026-1325  (pulled by aptos-sdk; 0.19.2 is latest)
+#   python-jose 3.5.0  PYSEC-2026-4298  (3.5.0 is latest)
 
 # Structured logging (per AUTH_STANDARD.md)
-structlog>=24.1.0
+structlog>=26.1.0

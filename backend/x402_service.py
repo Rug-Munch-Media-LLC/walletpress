@@ -20,6 +20,7 @@ core.x402_gate, RFC 7807 rendering is core.problem_details.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import secrets
@@ -103,6 +104,17 @@ def calc_price(count: int) -> float:
     return round(count * PRICE_PER_WALLET, 2)
 
 
+def _client_identity(api_key: str, client_ip: str) -> str:
+    """Identity an idempotency key is scoped to (CWE-639).
+
+    A hashed prepaid key when the caller presents one, otherwise the peer
+    address. The raw key is never persisted.
+    """
+    if api_key:
+        return "key:" + hashlib.sha256(api_key.encode()).hexdigest()[:32]
+    return f"ip:{client_ip}"
+
+
 def _get_free_wallets_used(client_ip: str) -> int:
     """Count free-tier wallets already issued to this client (server-verified)."""
     return x402_store.free_wallets_used(DB_PATH, client_ip)
@@ -149,9 +161,12 @@ async def generate(req: GenerateRequest, request: Request):
     count = min(max(req.count, 1), 100000)
     total = calc_price(count)
     client_ip = request.client.host if request.client else ""
+    identity = _client_identity(req.api_key, client_ip)
 
     if req.idempotency_key:
-        existing = x402_store.find_order_by_idempotency(DB_PATH, req.idempotency_key)
+        existing = x402_store.find_order_by_idempotency(
+            DB_PATH, req.idempotency_key, identity
+        )
         if existing:
             return {
                 "idempotent": True,
@@ -185,6 +200,7 @@ async def generate(req: GenerateRequest, request: Request):
         payment_tx=req.payment_tx,
         client_ip=client_ip,
         idempotency_key=req.idempotency_key,
+        client_identity=identity,
     )
     if payment_method == "free":
         _record_free_usage(client_ip, count)

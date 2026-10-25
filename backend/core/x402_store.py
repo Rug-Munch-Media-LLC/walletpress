@@ -21,9 +21,12 @@ SCHEMA = """
         payment_tx TEXT DEFAULT '', payment_status TEXT DEFAULT 'pending',
         status TEXT DEFAULT 'pending', created_at REAL NOT NULL,
         client_ip TEXT DEFAULT '',
-        idempotency_key TEXT DEFAULT ''
+        idempotency_key TEXT DEFAULT '',
+        client_identity TEXT DEFAULT ''
     );
     CREATE INDEX IF NOT EXISTS idx_orders_idempotency ON orders(idempotency_key);
+    CREATE INDEX IF NOT EXISTS idx_orders_idem_client
+        ON orders(idempotency_key, client_identity);
     CREATE TABLE IF NOT EXISTS free_tier_usage (
         client_ip TEXT PRIMARY KEY, wallets INTEGER NOT NULL DEFAULT 0
     );
@@ -42,7 +45,15 @@ def connect(db_path: Path, timeout: float = 15.0) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=15000")
     conn.executescript(SCHEMA)
+    _ensure_column(conn, "orders", "client_identity", "TEXT DEFAULT ''")
     return conn
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, decl: str) -> None:
+    """Add a column to a pre-existing database (idempotent migration)."""
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def free_wallets_used(db_path: Path, client_ip: str) -> int:
@@ -68,13 +79,20 @@ def record_free_usage(db_path: Path, client_ip: str, count: int) -> None:
     conn.close()
 
 
-def find_order_by_idempotency(db_path: Path, idempotency_key: str) -> dict | None:
-    """Return the recorded order for a replayed idempotency key, if any."""
+def find_order_by_idempotency(
+    db_path: Path, idempotency_key: str, client_identity: str
+) -> dict | None:
+    """Return this client's order for a replayed idempotency key, if any.
+
+    Scoped to the caller's identity: an idempotency key is a client-scoped
+    token, never a global handle on someone else's order (CWE-639).
+    """
     if not idempotency_key:
         return None
     conn = connect(db_path)
     row = conn.execute(
-        "SELECT * FROM orders WHERE idempotency_key = ?", (idempotency_key,)
+        "SELECT * FROM orders WHERE idempotency_key = ? AND client_identity = ?",
+        (idempotency_key, client_identity),
     ).fetchone()
     conn.close()
     return dict(row) if row else None
@@ -90,13 +108,14 @@ def insert_order(
     payment_tx: str,
     client_ip: str,
     idempotency_key: str,
+    client_identity: str = "",
 ) -> None:
     """Record a completed order."""
     conn = connect(db_path)
     conn.execute(
         "INSERT INTO orders (order_id, chain, count, amount_usd, payment_tx, "
-        "payment_status, status, created_at, client_ip, idempotency_key) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "payment_status, status, created_at, client_ip, idempotency_key, "
+        "client_identity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             order_id,
             chain,
@@ -108,6 +127,7 @@ def insert_order(
             time.time(),
             client_ip,
             idempotency_key or "",
+            client_identity,
         ),
     )
     conn.commit()

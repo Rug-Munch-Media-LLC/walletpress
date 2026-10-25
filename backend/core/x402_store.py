@@ -30,14 +30,18 @@ SCHEMA = """
 """
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    """Open (and lazily create) the gate database in WAL mode."""
+def connect(db_path: Path, timeout: float = 15.0) -> sqlite3.Connection:
+    """Open (and lazily create) the gate database in WAL mode.
+
+    A generous busy timeout keeps concurrent writers queueing instead of
+    raising "database is locked" while another thread holds the write lock.
+    """
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=timeout, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=15000")
     conn.executescript(SCHEMA)
-    conn.commit()
     return conn
 
 
@@ -108,3 +112,52 @@ def insert_order(
     )
     conn.commit()
     conn.close()
+
+
+_USED_SQL = "SELECT COALESCE(SUM(wallets), 0) FROM free_tier_usage WHERE client_ip = ?"
+_ADD_SQL = (
+    "INSERT INTO free_tier_usage (client_ip, wallets) VALUES (?, ?) "
+    "ON CONFLICT(client_ip) DO UPDATE SET wallets = wallets + ?"
+)
+
+
+def reserve_free_quota(
+    db_path: Path, client_ip: str, count: int, limit: int, *, attempts: int = 3
+) -> tuple[bool, int]:
+    """Atomically grant up to 'limit' free wallets to one client.
+
+    Returns (granted, wallets_used_before). The quota read and the increment
+    happen inside a single BEGIN IMMEDIATE transaction, so concurrent requests
+    can never jointly exceed the quota (CWE-362). Writers queue on the sqlite
+    write lock instead of interleaving; a busy lock is retried, never granted.
+    """
+    for attempt in range(1, attempts + 1):
+        conn = connect(db_path)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(_USED_SQL, (client_ip,)).fetchone()
+            used = int(row[0]) if row and row[0] else 0
+            if used + count > limit:
+                conn.execute("ROLLBACK")
+                return False, used
+            conn.execute(_ADD_SQL, (client_ip, count, count))
+            conn.execute("COMMIT")
+            return True, used
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc) or attempt == attempts:
+                raise
+        finally:
+            conn.close()
+    raise AssertionError("reserve_free_quota: retry loop exhausted")
+
+
+def release_free_quota(db_path: Path, client_ip: str, count: int) -> None:
+    """Return reserved free-tier wallets after a failed order (fail-closed)."""
+    conn = connect(db_path)
+    try:
+        conn.execute(
+            "UPDATE free_tier_usage SET wallets = MAX(wallets - ?, 0) WHERE client_ip = ?",
+            (count, client_ip),
+        )
+    finally:
+        conn.close()

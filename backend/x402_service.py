@@ -180,30 +180,47 @@ async def generate(req: GenerateRequest, request: Request):
         payment_tx=req.payment_tx,
         order_id=order_id,
         chain=chain,
-        count=count,
         total_usd=total,
-        client_ip=client_ip,
-        free_used=_get_free_wallets_used(client_ip),
         price_per_wallet=PRICE_PER_WALLET,
         min_order_usd=MIN_ORDER_USD,
-        free_wallets=FREE_WALLETS,
-        pay_to=PAYMENT_ADDRESS,
     )
 
-    wallets = _generate_wallets(chain, count, order_id)
-    x402_store.insert_order(
-        DB_PATH,
-        order_id=order_id,
-        chain=chain,
-        count=count,
-        amount_usd=total,
-        payment_tx=req.payment_tx,
-        client_ip=client_ip,
-        idempotency_key=req.idempotency_key,
-        client_identity=identity,
-    )
+    # Reserve BEFORE generating: quota is claimed atomically, and if anything
+    # below fails the claim is released, so a failure can neither over-grant
+    # nor silently burn a client's free tier. Nothing is counted after the
+    # write — that is what used to double-count.
+    reserved = False
     if payment_method == "free":
-        _record_free_usage(client_ip, count)
+        reserved, free_used = x402_store.reserve_free_quota(
+            DB_PATH, client_ip, count, FREE_WALLETS
+        )
+        if not reserved:
+            raise x402_gate.free_tier_rejection(
+                chain=chain,
+                total_usd=total,
+                free_used=free_used,
+                limit=FREE_WALLETS,
+                pay_to=PAYMENT_ADDRESS,
+            )
+
+    try:
+        wallets = _generate_wallets(chain, count, order_id)
+        x402_store.insert_order(
+            DB_PATH,
+            order_id=order_id,
+            chain=chain,
+            count=count,
+            amount_usd=total,
+            payment_tx=req.payment_tx,
+            client_ip=client_ip,
+            idempotency_key=req.idempotency_key,
+            client_identity=identity,
+        )
+    except Exception:
+        if reserved:
+            x402_store.release_free_quota(DB_PATH, client_ip, count)
+        logger.exception("order_failed order_id=%s chain=%s count=%s", order_id, chain, count)
+        raise
 
     return {
         "order_id": order_id,

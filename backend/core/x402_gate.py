@@ -108,14 +108,9 @@ async def authorize(
     payment_tx: str,
     order_id: str,
     chain: str,
-    count: int,
     total_usd: float,
-    client_ip: str,
-    free_used: int,
     price_per_wallet: float,
     min_order_usd: float,
-    free_wallets: int,
-    pay_to: str,
 ) -> tuple[str, dict | None]:
     """Decide the payment method, or raise the error that refuses the order.
 
@@ -164,12 +159,6 @@ async def authorize(
             raise HTTPException(status_code=402, detail=f"Payment verification failed: {match_reason}")
         return "onchain", await settle_with_coffer(order_id, chain, payment_tx, total_usd)
 
-    if free_used + count > free_wallets:
-        raise free_tier_rejection(
-            chain=chain,
-            total_usd=total_usd,
-            free_used=free_used,
-            limit=free_wallets,
-            pay_to=pay_to,
-        )
+    # Free tier is decided by the caller: it must RESERVE quota before any
+    # wallet exists (reserve-then-generate), so this branch only classifies.
     return "free", None

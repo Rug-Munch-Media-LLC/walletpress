@@ -489,7 +489,6 @@ jobs:
   # is never clobbered.
   changelog:
     runs-on: docker-x64
-    timeout-minutes: 30
     needs: [lint]
     container:
       # python+node: pip for git-cliff; git for fetch-depth: 0.

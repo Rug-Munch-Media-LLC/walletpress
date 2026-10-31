@@ -287,7 +287,7 @@ jobs:
       image: node:22-bookworm
       # NO docker.sock. The runner dropped it from valid_volumes: a job holding
       # the host socket is root-equivalent and can bind-mount any host path,
-      # including the live /srv/work/repos/* tree. kaniko builds the image
+      # including the live host checkout tree. kaniko builds the image
       # in-container (daemonless, unprivileged) and trivy scans the resulting
       # tar — the same artefact with zero host privilege.
     steps:
@@ -453,7 +453,6 @@ jobs:
     timeout-minutes: 30
     container:
       image: node:22-bookworm-slim
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: HTMLHint — markup validation (BLOCKING)
@@ -490,7 +489,6 @@ jobs:
   # is never clobbered.
   changelog:
     runs-on: docker-x64
-    timeout-minutes: 30
     needs: [lint]
     container:
       # python+node: pip for git-cliff; git for fetch-depth: 0.

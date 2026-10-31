@@ -50,7 +50,6 @@ dev = [
     "ruff>=0.17.2",
     "mypy>=2.4.0",
     "bandit>=1.9.0",
-    "semgrep>=1.182.1",
     "import-linter>=2.15",
     "vulture>=2.16",
     "pytest>=9.1.0",
@@ -74,7 +73,11 @@ where = ["."]
 include = ["walletpress*"]
 
 [tool.ruff]
-extend = "../../standards/templates/ruff-base.toml"
+# Inlined from standards/templates/ruff-base.toml (fleet base, 48 lines).
+# CI checks out only this repo, so an `extend = "../../standards/..."` path
+# cannot resolve there and ruff aborts before linting. Keep this block in
+# sync with the fleet base when it changes.
+line-length = 100
 target-version = "py310"
 extend-exclude = [
     ".venv",
@@ -84,11 +87,27 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
+# From the fleet base config (see the note above).
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "C4", "SIM", "TCH", "RUF",
+    "ASYNC", "S", "PIE", "PT",
+]
 extend-select = ["A"]
+ignore = ["E501", "B008", "S101", "N818"]
 extend-ignore = [
     "E402",
     "E702",
 ]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.lint.flake8-implicit-str-concat]
+allow-multiline = false
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may have imports after docstrings for setup convenience

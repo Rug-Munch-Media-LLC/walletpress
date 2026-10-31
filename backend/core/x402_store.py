@@ -45,15 +45,22 @@ def connect(db_path: Path, timeout: float = 15.0) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=15000")
     conn.executescript(SCHEMA)
-    _ensure_column(conn, "orders", "client_identity", "TEXT DEFAULT ''")
+    _ensure_client_identity(conn)
     return conn
 
 
-def _ensure_column(conn: sqlite3.Connection, table: str, column: str, decl: str) -> None:
-    """Add a column to a pre-existing database (idempotent migration)."""
-    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
-    if column not in cols:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+def _ensure_client_identity(conn: sqlite3.Connection) -> None:
+    """Add orders.client_identity to a pre-existing database (idempotent)."
+
+    Fixed statements only: the old generic helper built SQL by f-string
+    interpolation, which semgrep flags as SQL construction (and is how an
+    injection arrives once a caller-supplied name reaches it).
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
+    if "client_identity" not in cols:
+        conn.execute(
+            "ALTER TABLE orders ADD COLUMN client_identity TEXT DEFAULT ''"
+        )
 
 
 def free_wallets_used(db_path: Path, client_ip: str) -> int:

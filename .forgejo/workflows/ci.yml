@@ -77,10 +77,12 @@ jobs:
             --exclude='.github/' \
             --sarif --output=semgrep.sarif \
             .
-      - uses: actions/upload-artifact@v5
-        with:
-          name: semgrep-report
-          path: semgrep.sarif
+      # No artifact upload: Forgejo answers upload-artifact@v4+/v5 with
+      # "GHESNotSupportedError", which failed this job even on a clean scan.
+      # The scan exit code is the gate; the SARIF is regenerated on demand.
+      - name: Semgrep report (no artifact upload)
+        if: always()
+        run: ls -l semgrep.sarif
 
   lint:
     runs-on: docker-x64

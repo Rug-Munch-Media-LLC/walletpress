@@ -12,5 +12,8 @@ dependencies = [
 [project.scripts]
 walletpress-mcp = "walletpress_mcp:main"
 
-[tool.setuptools.packages.find]
-include = ["walletpress_mcp*"]
+[tool.setuptools]
+# Two top-level modules: the MCP server and its transport layer.
+# packages.find matched nothing (there are no subpackages), so a plain
+#  used to ship no importable module at all.
+py-modules = ["walletpress_mcp", "transport"]

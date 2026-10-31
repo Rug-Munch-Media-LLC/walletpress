@@ -1,0 +1,8 @@
+# Baseline of historical false positives, one fingerprint per line:
+# <commit>:<file>:<rule-id>:<line>
+# A documentation-style private-range client IP in a rate-limit test.
+776cb373126ff620cfdb4992b1dc78ce8d50c8f9:backend/tests/test_x402_free_tier_race.py:internal-hostname:17
+# The comment named a password-manager path as an example; reworded since.
+b59ba909ed76c2a11efe7d5b106a3a7773f8fcc4:scripts/commit-msg-methodology-check.sh:gopass-reference:6
+# File was deleted; the literal only survives in history.
+4bef28db44ab2190113fb608f86700c4806871f9:scripts/check-open-core.sh:gopass-reference:240

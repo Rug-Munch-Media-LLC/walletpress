@@ -14,7 +14,7 @@ import pytest
 
 from core import x402_store
 
-CLIENT = "10.0.0.1"
+CLIENT = "203.0.113.10"  # TEST-NET-3, not a private-network literal
 
 
 @pytest.fixture
